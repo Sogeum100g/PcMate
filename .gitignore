@@ -1,0 +1,10 @@
+bin/
+obj/
+.build-check/
+.build-check-project/
+
+.vs/
+.vscode/
+
+*.user
+*.suo

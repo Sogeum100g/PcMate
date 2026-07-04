@@ -1,99 +1,243 @@
 <Window
     x:Class="PcMate.MainWindow"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:primitives="clr-namespace:System.Windows.Controls.Primitives;assembly=PresentationFramework"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     Title="PcMate"
-    Width="300"
-    Height="300"
-    MinWidth="150"
-    MinHeight="150"
+    Width="220"
+    Height="190"
+    MinWidth="48"
+    MinHeight="48"
     Topmost="True"
-    ResizeMode="CanResize"
+    AllowsTransparency="True"
+    Background="Transparent"
+    ResizeMode="NoResize"
+    ShowInTaskbar="True"
     WindowStartupLocation="CenterScreen"
-    Background="#111827"
-    MouseLeftButtonDown="OnMouseLeftButtonDown">
+    WindowStyle="None"
+    Icon="assets/app.ico">
 
-    <Grid Margin="12">
+    <Grid Background="Transparent">
+        <Grid.ContextMenu>
+            <ContextMenu>
+                <MenuItem
+                    x:Name="AlwaysOnTopMenuItem"
+                    Header="Always on top"
+                    IsCheckable="True"
+                    IsChecked="True"
+                    Click="OnAlwaysOnTopClick" />
+                <MenuItem
+                    x:Name="ResourceBarMenuItem"
+                    Header="Show resource bar"
+                    IsCheckable="True"
+                    IsChecked="True"
+                    Click="OnResourceBarClick" />
+                <MenuItem
+                    x:Name="SpeechBubbleMenuItem"
+                    Header="Show speech bubble"
+                    IsCheckable="True"
+                    Click="OnSpeechBubbleClick" />
+                <MenuItem Header="Character">
+                    <MenuItem
+                        x:Name="TailsCharacterMenuItem"
+                        Header="Tails"
+                        IsCheckable="True"
+                        IsChecked="True"
+                        Tag="tails"
+                        Click="OnCharacterMenuItemClick" />
+                    <MenuItem
+                        x:Name="RedParrotCharacterMenuItem"
+                        Header="Red Parrot"
+                        IsCheckable="True"
+                        Tag="red_parrot"
+                        Click="OnCharacterMenuItemClick" />
+                    <MenuItem
+                        x:Name="KakaoRyanCharacterMenuItem"
+                        Header="Kakao Ryan"
+                        IsCheckable="True"
+                        Tag="kakao_ryan"
+                        Click="OnCharacterMenuItemClick" />
+                </MenuItem>
+                <MenuItem Header="Animation speed">
+                    <MenuItem
+                        x:Name="SpeedHalfMenuItem"
+                        Header="0.5x"
+                        IsCheckable="True"
+                        Tag="0.5"
+                        Click="OnAnimationSpeedMenuItemClick" />
+                    <MenuItem
+                        x:Name="SpeedThreeQuarterMenuItem"
+                        Header="0.75x"
+                        IsCheckable="True"
+                        Tag="0.75"
+                        Click="OnAnimationSpeedMenuItemClick" />
+                    <MenuItem
+                        x:Name="SpeedNormalMenuItem"
+                        Header="1x"
+                        IsCheckable="True"
+                        IsChecked="True"
+                        Tag="1"
+                        Click="OnAnimationSpeedMenuItemClick" />
+                    <MenuItem
+                        x:Name="SpeedOneAndHalfMenuItem"
+                        Header="1.5x"
+                        IsCheckable="True"
+                        Tag="1.5"
+                        Click="OnAnimationSpeedMenuItemClick" />
+                    <MenuItem
+                        x:Name="SpeedDoubleMenuItem"
+                        Header="2x"
+                        IsCheckable="True"
+                        Tag="2"
+                        Click="OnAnimationSpeedMenuItemClick" />
+                </MenuItem>
+                <Separator />
+                <MenuItem Header="Reset size" Click="OnResetSizeClick" />
+                <MenuItem Header="Exit" Click="OnExitClick" />
+            </ContextMenu>
+        </Grid.ContextMenu>
+
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <Border
+        <Grid
+            x:Name="SpeechBubble"
             Grid.Row="0"
-            Padding="8"
-            Background="#1F2937"
-            CornerRadius="6">
-            <DockPanel LastChildFill="True">
-                <TextBlock
-                    DockPanel.Dock="Left"
-                    FontSize="14"
-                    FontWeight="SemiBold"
-                    Foreground="White"
-                    Text="PcMate" />
-                <TextBlock
-                    DockPanel.Dock="Right"
-                    FontSize="11"
-                    Foreground="#CBD5E1"
-                    Text="{Binding LastUpdatedText}" />
-            </DockPanel>
-        </Border>
+            HorizontalAlignment="Center"
+            Margin="4,4,4,0"
+            Visibility="Collapsed">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="8" />
+            </Grid.RowDefinitions>
 
-        <Grid Grid.Row="1" Margin="0,10">
-            <Ellipse
-                Fill="{Binding StateBrush}"
-                Opacity="0.18"
-                Stroke="{Binding StateBrush}"
-                StrokeThickness="2" />
-            <StackPanel
+            <Border
+                x:Name="SpeechBubbleBody"
+                Width="180"
+                Height="64"
+                MinWidth="110"
+                MinHeight="48"
+                Padding="8,6"
+                Background="#F2FFFFFF"
+                BorderBrush="#CC111827"
+                BorderThickness="1"
+                CornerRadius="8">
+                <Grid>
+                    <TextBlock
+                        Margin="0,0,12,12"
+                        FontSize="11"
+                        FontWeight="SemiBold"
+                        Foreground="#111827"
+                        LineHeight="14"
+                        Text="{Binding SpeechBubbleText}"
+                        TextWrapping="Wrap" />
+                    <primitives:Thumb
+                        x:Name="SpeechBubbleResizeThumb"
+                        Width="14"
+                        Height="14"
+                        HorizontalAlignment="Right"
+                        VerticalAlignment="Bottom"
+                        Cursor="SizeNWSE"
+                        DragDelta="OnSpeechBubbleResizeThumbDragDelta">
+                        <primitives:Thumb.Template>
+                            <ControlTemplate TargetType="{x:Type primitives:Thumb}">
+                                <Grid Background="Transparent">
+                                    <Path
+                                        Data="M 3 12 L 12 3 M 7 12 L 12 7"
+                                        Stroke="#CC111827"
+                                        StrokeEndLineCap="Round"
+                                        StrokeStartLineCap="Round"
+                                        StrokeThickness="4" />
+                                    <Path
+                                        Data="M 3 12 L 12 3 M 7 12 L 12 7"
+                                        Stroke="#FF22D3EE"
+                                        StrokeEndLineCap="Round"
+                                        StrokeStartLineCap="Round"
+                                        StrokeThickness="2" />
+                                </Grid>
+                            </ControlTemplate>
+                        </primitives:Thumb.Template>
+                    </primitives:Thumb>
+                </Grid>
+            </Border>
+
+            <Path
+                Grid.Row="1"
+                Width="14"
+                Height="8"
                 HorizontalAlignment="Center"
-                VerticalAlignment="Center">
-                <TextBlock
-                    HorizontalAlignment="Center"
-                    FontSize="24"
-                    FontWeight="SemiBold"
-                    Foreground="White"
-                    Text="{Binding CharacterState}" />
-                <TextBlock
-                    HorizontalAlignment="Center"
-                    Margin="0,4,0,0"
-                    FontSize="12"
-                    Foreground="#CBD5E1"
-                    Text="Memory state" />
-            </StackPanel>
+                VerticalAlignment="Top"
+                Data="M 0 0 L 14 0 L 7 8 Z"
+                Fill="#F2FFFFFF"
+                Stroke="#CC111827"
+                StrokeThickness="1" />
         </Grid>
 
-        <Border
+        <Grid Grid.Row="1" Margin="4">
+            <Image
+                x:Name="CharacterImage"
+                MouseLeftButtonDown="OnCharacterMouseLeftButtonDown"
+                RenderOptions.BitmapScalingMode="NearestNeighbor"
+                Source="{Binding CharacterFrame}"
+                Stretch="Uniform" />
+
+            <primitives:Thumb
+                x:Name="ResizeThumb"
+                Width="18"
+                Height="18"
+                HorizontalAlignment="Left"
+                VerticalAlignment="Bottom"
+                Cursor="SizeNESW"
+                DragDelta="OnResizeThumbDragDelta">
+                <primitives:Thumb.Template>
+                    <ControlTemplate TargetType="{x:Type primitives:Thumb}">
+                        <Grid Background="Transparent">
+                            <Path
+                                Data="M 2 16 L 16 2 M 2 11 L 11 2 M 2 6 L 6 2"
+                                Stroke="#CC111827"
+                                StrokeEndLineCap="Round"
+                                StrokeStartLineCap="Round"
+                                StrokeThickness="5" />
+                            <Path
+                                Data="M 2 16 L 16 2 M 2 11 L 11 2 M 2 6 L 6 2"
+                                Stroke="#FF22D3EE"
+                                StrokeEndLineCap="Round"
+                                StrokeStartLineCap="Round"
+                                StrokeThickness="2" />
+                        </Grid>
+                    </ControlTemplate>
+                </primitives:Thumb.Template>
+            </primitives:Thumb>
+        </Grid>
+
+        <StackPanel
+            x:Name="ResourceBarPanel"
             Grid.Row="2"
-            Padding="8"
-            Background="#1F2937"
-            CornerRadius="6">
-            <StackPanel>
-                <DockPanel LastChildFill="True">
-                    <TextBlock
-                        DockPanel.Dock="Left"
-                        FontSize="13"
-                        Foreground="#E5E7EB"
-                        Text="Memory" />
-                    <TextBlock
-                        DockPanel.Dock="Right"
-                        FontSize="13"
-                        FontWeight="SemiBold"
-                        Foreground="White"
-                        Text="{Binding MemoryText}" />
-                </DockPanel>
-                <ProgressBar
-                    Height="10"
-                    Margin="0,8,0,6"
-                    Maximum="100"
-                    Minimum="0"
-                    Value="{Binding MemoryUsagePercent}" />
-                <TextBlock
-                    FontSize="11"
-                    Foreground="#CBD5E1"
-                    Text="{Binding StatusText}" />
-            </StackPanel>
-        </Border>
+            Margin="8,0,8,4">
+            <TextBlock
+                Margin="0,0,0,3"
+                FontSize="11"
+                FontWeight="SemiBold"
+                Foreground="White"
+                Text="{Binding ResourceUsageText}">
+                <TextBlock.Effect>
+                    <DropShadowEffect
+                        BlurRadius="2"
+                        Direction="315"
+                        Opacity="0.9"
+                        ShadowDepth="1"
+                        Color="#111827" />
+                </TextBlock.Effect>
+            </TextBlock>
+            <ProgressBar
+                x:Name="ResourceProgressBar"
+                Height="8"
+                Maximum="100"
+                Minimum="0"
+                Value="{Binding MemoryUsagePercent, Mode=OneWay}" />
+        </StackPanel>
     </Grid>
 </Window>

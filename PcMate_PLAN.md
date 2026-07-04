@@ -318,6 +318,8 @@ PcMate/
 
   Services/
     StateClassifier.cs
+    AnimationController.cs
+    WindowPlacementStore.cs
 
   ViewModels/
     MainViewModel.cs

@@ -16,6 +16,8 @@ memory usage collection
 - Topmost resizable window
 - Physical memory usage polling every second
 - `Lying`, `Sitting`, `Walking`, `Running` state classification
+- PNG frame animation using the test assets under `assets/characters`
+- Window size and position restore between launches
 - Basic MVVM-style separation between monitoring, classification, and UI
 
 Future expansion ideas are tracked separately in [PcMate_EXPANSION_PLAN.md](./PcMate_EXPANSION_PLAN.md).
