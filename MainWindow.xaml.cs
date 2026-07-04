@@ -4,6 +4,8 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
+using System.Windows.Media;
+using PcMate.Models;
 using PcMate.Monitors;
 using PcMate.Services;
 using PcMate.ViewModels;
@@ -27,13 +29,24 @@ public partial class MainWindow : Window
 
         _windowPlacementStore = WindowPlacementStore.CreateDefault();
         _viewModel = new MainViewModel(
-            new MemoryMonitor(),
+            new SystemResourceMonitor(),
             new TopProcessMonitor(),
             new StateClassifier(),
             new AnimationController(Path.Combine(AppContext.BaseDirectory, "assets", "characters")));
 
         ApplySavedWindowPlacement();
         DataContext = _viewModel;
+        CharacterImage.SizeChanged += (_, _) => UpdateCharacterOverlayPlacement();
+        SpeechBubble.SizeChanged += (_, _) => UpdateCharacterOverlayPlacement();
+        CharacterStage.SizeChanged += (_, _) => UpdateCharacterOverlayPlacement();
+        _viewModel.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(MainViewModel.CharacterFrame))
+            {
+                Dispatcher.BeginInvoke((Action)UpdateCharacterOverlayPlacement);
+            }
+        };
+
         Loaded += (_, _) => _viewModel.Start();
         Closing += (_, _) => SaveWindowPlacement();
         Closed += (_, _) => _viewModel.Dispose();
@@ -71,9 +84,19 @@ public partial class MainWindow : Window
 
     private void OnSpeechBubbleClick(object sender, RoutedEventArgs e)
     {
+        _viewModel.SetSpeechBubbleEnabled(SpeechBubbleMenuItem.IsChecked);
         SpeechBubble.Visibility = SpeechBubbleMenuItem.IsChecked
             ? Visibility.Visible
             : Visibility.Collapsed;
+        UpdateCharacterOverlayPlacement();
+    }
+
+    private void OnImageBorderClick(object sender, RoutedEventArgs e)
+    {
+        CharacterImageBoundary.Visibility = ImageBorderMenuItem.IsChecked
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+        UpdateCharacterOverlayPlacement();
     }
 
     private void OnSpeechBubbleResizeThumbDragDelta(object sender, DragDeltaEventArgs e)
@@ -87,6 +110,20 @@ public partial class MainWindow : Window
             SpeechBubbleBody.ActualHeight + e.VerticalChange,
             MinSpeechBubbleHeight,
             MaxSpeechBubbleHeight);
+        UpdateCharacterOverlayPlacement();
+    }
+
+    private void OnResourceMenuItemClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is not MenuItem menuItem
+            || menuItem.Tag is not string resourceText
+            || !Enum.TryParse(resourceText, out ResourceType resourceType))
+        {
+            return;
+        }
+
+        _viewModel.SelectResource(resourceType);
+        UpdateResourceMenuChecks(_viewModel.SelectedResourceType);
     }
 
     private void OnCharacterMenuItemClick(object sender, RoutedEventArgs e)
@@ -137,6 +174,13 @@ public partial class MainWindow : Window
         KakaoRyanCharacterMenuItem.IsChecked = characterId == "kakao_ryan";
     }
 
+    private void UpdateResourceMenuChecks(ResourceType resourceType)
+    {
+        MemoryResourceMenuItem.IsChecked = resourceType == ResourceType.Memory;
+        CpuResourceMenuItem.IsChecked = resourceType == ResourceType.Cpu;
+        GpuResourceMenuItem.IsChecked = resourceType == ResourceType.Gpu;
+    }
+
     private void UpdateAnimationSpeedMenuChecks(double speedMultiplier)
     {
         SpeedHalfMenuItem.IsChecked = IsSpeedSelected(speedMultiplier, 0.5);
@@ -149,6 +193,54 @@ public partial class MainWindow : Window
     private static bool IsSpeedSelected(double current, double target)
     {
         return Math.Abs(current - target) < 0.001;
+    }
+
+    private void UpdateCharacterOverlayPlacement()
+    {
+        if (!TryGetDisplayedImageBounds(out double imageWidth, out double imageHeight, out double imageTop))
+        {
+            return;
+        }
+
+        if (CharacterImageBoundary.Visibility == Visibility.Visible)
+        {
+            CharacterImageBoundary.Width = imageWidth;
+            CharacterImageBoundary.Height = imageHeight;
+        }
+
+        if (SpeechBubble.Visibility == Visibility.Visible)
+        {
+            double speechBubbleTop = Math.Max(0, imageTop - SpeechBubble.ActualHeight + 2);
+            SpeechBubble.Margin = new Thickness(4, speechBubbleTop, 4, 0);
+        }
+    }
+
+    private bool TryGetDisplayedImageBounds(out double width, out double height, out double top)
+    {
+        width = 0;
+        height = 0;
+        top = 0;
+
+        ImageSource? source = CharacterImage.Source;
+        if (source is null
+            || source.Width <= 0
+            || source.Height <= 0
+            || CharacterImage.ActualWidth <= 0
+            || CharacterImage.ActualHeight <= 0)
+        {
+            return false;
+        }
+
+        double scale = Math.Min(CharacterImage.ActualWidth / source.Width, CharacterImage.ActualHeight / source.Height);
+        if (double.IsNaN(scale) || double.IsInfinity(scale) || scale <= 0)
+        {
+            return false;
+        }
+
+        width = source.Width * scale;
+        height = source.Height * scale;
+        top = (CharacterImage.ActualHeight - height) / 2;
+        return true;
     }
 
     private void ApplySavedWindowPlacement()

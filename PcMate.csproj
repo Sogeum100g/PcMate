@@ -11,7 +11,7 @@
 
   <ItemGroup>
     <Resource Include="assets\app.ico" />
-    <Content Include="assets\characters\**\*.png" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="assets\characters\**\*.gif" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="assets\characters\**\*.ico" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 

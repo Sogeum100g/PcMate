@@ -5,12 +5,8 @@ namespace PcMate.Monitors;
 
 public sealed class MemoryMonitor : IResourceMonitor
 {
-    public ResourceSnapshot GetSnapshot()
+    public int GetUsagePercent(ResourceType resourceType)
     {
-        return new ResourceSnapshot
-        {
-            MemoryUsagePercent = NativeMemoryApi.GetMemoryUsagePercent(),
-            CollectedAt = DateTime.Now
-        };
+        return NativeMemoryApi.GetMemoryUsagePercent();
     }
 }

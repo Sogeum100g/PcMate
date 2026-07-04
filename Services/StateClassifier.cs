@@ -7,8 +7,12 @@ public sealed class StateClassifier
     public CharacterState Classify(ResourceSnapshot snapshot)
     {
         ArgumentNullException.ThrowIfNull(snapshot);
+        return Classify(snapshot.MemoryUsagePercent);
+    }
 
-        return snapshot.MemoryUsagePercent switch
+    public CharacterState Classify(int usagePercent)
+    {
+        return usagePercent switch
         {
             < 40 => CharacterState.Lying,
             < 60 => CharacterState.Sitting,

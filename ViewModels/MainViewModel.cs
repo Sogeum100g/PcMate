@@ -11,6 +11,7 @@ namespace PcMate.ViewModels;
 
 public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 {
+    private static readonly TimeSpan TopProcessRefreshInterval = TimeSpan.FromSeconds(3);
     private readonly IResourceMonitor _monitor;
     private readonly TopProcessMonitor _topProcessMonitor;
     private readonly StateClassifier _classifier;
@@ -19,7 +20,15 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     private readonly Stopwatch _animationClock = new();
     private TimeSpan _lastFrameAt;
     private bool _isAnimationRendering;
-    private int _memoryUsagePercent;
+    private bool _isRefreshRunning;
+    private bool _refreshPending;
+    private bool _isDisposed;
+    private bool _isSpeechBubbleEnabled;
+    private DateTime _lastTopProcessRefreshAt = DateTime.MinValue;
+    private ResourceType? _lastTopProcessResourceType;
+    private IReadOnlyList<ProcessResourceUsage> _lastTopProcesses = [];
+    private int _resourceUsagePercent;
+    private ResourceType _selectedResourceType = ResourceType.Memory;
     private CharacterState _characterState;
     private ImageSource? _characterFrame;
     private string _speechBubbleText = "Memory TOP";
@@ -38,28 +47,44 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         {
             Interval = TimeSpan.FromSeconds(1)
         };
-        _refreshTimer.Tick += (_, _) => Refresh();
+        _refreshTimer.Tick += async (_, _) => await RefreshAsync();
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
 
-    public int MemoryUsagePercent
+    public int ResourceUsagePercent
     {
-        get => _memoryUsagePercent;
+        get => _resourceUsagePercent;
         private set
         {
-            if (_memoryUsagePercent == value)
+            if (_resourceUsagePercent == value)
             {
                 return;
             }
 
-            _memoryUsagePercent = value;
+            _resourceUsagePercent = value;
             OnPropertyChanged();
             OnPropertyChanged(nameof(ResourceUsageText));
         }
     }
 
-    public string ResourceUsageText => $"Memory {MemoryUsagePercent}%";
+    public ResourceType SelectedResourceType
+    {
+        get => _selectedResourceType;
+        private set
+        {
+            if (_selectedResourceType == value)
+            {
+                return;
+            }
+
+            _selectedResourceType = value;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(ResourceUsageText));
+        }
+    }
+
+    public string ResourceUsageText => $"{GetResourceLabel(SelectedResourceType)} {ResourceUsagePercent}%";
 
     public string SpeechBubbleText
     {
@@ -114,16 +139,17 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 
     public void Start()
     {
-        Refresh();
         CharacterFrame = _animationController.CurrentFrame;
         _animationClock.Restart();
         _lastFrameAt = _animationClock.Elapsed;
-        StartAnimationRendering();
+        UpdateAnimationRendering();
         _refreshTimer.Start();
+        _ = RefreshAsync();
     }
 
     public void Dispose()
     {
+        _isDisposed = true;
         _refreshTimer.Stop();
         StopAnimationRendering();
         _animationClock.Stop();
@@ -138,6 +164,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 
         CharacterFrame = _animationController.CurrentFrame;
         _lastFrameAt = _animationClock.Elapsed;
+        UpdateAnimationRendering();
         OnPropertyChanged(nameof(CurrentCharacterId));
         return true;
     }
@@ -150,43 +177,162 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         }
 
         _lastFrameAt = _animationClock.Elapsed;
+        UpdateAnimationRendering();
         OnPropertyChanged(nameof(AnimationSpeedMultiplier));
         return true;
     }
 
-    private void Refresh()
+    public bool SelectResource(ResourceType resourceType)
     {
-        try
+        if (SelectedResourceType == resourceType)
         {
-            ResourceSnapshot snapshot = _monitor.GetSnapshot();
-            MemoryUsagePercent = snapshot.MemoryUsagePercent;
-            SpeechBubbleText = BuildSpeechBubbleText(_topProcessMonitor.GetTopMemoryProcesses(2));
-            CharacterState nextState = _classifier.Classify(snapshot);
-            if (CharacterState != nextState)
-            {
-                SetCharacterState(nextState);
-            }
+            return false;
         }
-        catch
+
+        SelectedResourceType = resourceType;
+        InvalidateTopProcessCache();
+        _ = RefreshAsync();
+        return true;
+    }
+
+    public void SetSpeechBubbleEnabled(bool isEnabled)
+    {
+        if (_isSpeechBubbleEnabled == isEnabled)
         {
-            // Keep the last known UI state if the OS memory query fails.
+            return;
+        }
+
+        _isSpeechBubbleEnabled = isEnabled;
+        if (_isSpeechBubbleEnabled)
+        {
+            InvalidateTopProcessCache();
+            _ = RefreshAsync();
         }
     }
 
-    private static string BuildSpeechBubbleText(IReadOnlyList<ProcessResourceUsage> processes)
+    private async Task RefreshAsync()
     {
+        if (_isRefreshRunning)
+        {
+            _refreshPending = true;
+            return;
+        }
+
+        _isRefreshRunning = true;
+        try
+        {
+            do
+            {
+                _refreshPending = false;
+                ResourceType selectedResourceType = SelectedResourceType;
+                bool includeTopProcesses = ShouldRefreshTopProcesses(selectedResourceType);
+                ResourceRefreshResult? result = await GetRefreshResultAsync(selectedResourceType, includeTopProcesses);
+                if (_isDisposed)
+                {
+                    return;
+                }
+
+                if (result is null || result.ResourceType != SelectedResourceType)
+                {
+                    continue;
+                }
+
+                ResourceUsagePercent = result.UsagePercent;
+                UpdateSpeechBubbleText(result);
+                CharacterState nextState = _classifier.Classify(result.UsagePercent);
+                if (CharacterState != nextState)
+                {
+                    SetCharacterState(nextState);
+                }
+            } while (_refreshPending);
+        }
+        finally
+        {
+            _isRefreshRunning = false;
+        }
+    }
+
+    private async Task<ResourceRefreshResult?> GetRefreshResultAsync(ResourceType resourceType, bool includeTopProcesses)
+    {
+        try
+        {
+            return await Task.Run(() =>
+            {
+                int usagePercent = _monitor.GetUsagePercent(resourceType);
+                IReadOnlyList<ProcessResourceUsage>? topProcesses = includeTopProcesses
+                    ? _topProcessMonitor.GetTopProcesses(resourceType, 2)
+                    : null;
+                return new ResourceRefreshResult(resourceType, usagePercent, topProcesses);
+            });
+        }
+        catch
+        {
+            // Keep the last known UI state if a platform counter is temporarily unavailable.
+            return null;
+        }
+    }
+
+    private bool ShouldRefreshTopProcesses(ResourceType resourceType)
+    {
+        if (!_isSpeechBubbleEnabled)
+        {
+            return false;
+        }
+
+        return _lastTopProcessResourceType != resourceType
+            || DateTime.UtcNow - _lastTopProcessRefreshAt >= TopProcessRefreshInterval;
+    }
+
+    private void UpdateSpeechBubbleText(ResourceRefreshResult result)
+    {
+        if (!_isSpeechBubbleEnabled || result.TopProcesses is null)
+        {
+            return;
+        }
+
+        _lastTopProcessResourceType = result.ResourceType;
+        _lastTopProcesses = result.TopProcesses;
+        _lastTopProcessRefreshAt = DateTime.UtcNow;
+        SpeechBubbleText = BuildSpeechBubbleText(result.ResourceType, _lastTopProcesses);
+    }
+
+    private void InvalidateTopProcessCache()
+    {
+        _lastTopProcessRefreshAt = DateTime.MinValue;
+        _lastTopProcessResourceType = null;
+        _lastTopProcesses = [];
+    }
+
+    private static string BuildSpeechBubbleText(ResourceType resourceType, IReadOnlyList<ProcessResourceUsage> processes)
+    {
+        string resourceLabel = GetResourceLabel(resourceType);
         if (processes.Count == 0)
         {
-            return "Memory TOP\nNo process data";
+            return $"{resourceLabel} TOP\nNo process data";
         }
 
         IEnumerable<string> lines = processes.Select((process, index) =>
         {
             string processCount = process.ProcessCount > 1 ? $" ({process.ProcessCount})" : string.Empty;
-            return $"{index + 1}. {process.DisplayName}{processCount} {FormatBytes(process.MemoryBytes)}";
+            string usageText = resourceType == ResourceType.Memory
+                ? FormatBytes(process.MemoryBytes)
+                : $"{process.UsagePercent:0.#}%";
+
+            return $"{index + 1}. {process.DisplayName}{processCount} {usageText}";
         });
 
-        return $"Memory TOP\n{string.Join('\n', lines)}";
+        return $"{resourceLabel} TOP\n{string.Join('\n', lines)}";
+    }
+
+    private static string GetResourceLabel(ResourceType resourceType)
+    {
+        return resourceType switch
+        {
+            ResourceType.Memory => "Memory",
+            ResourceType.Cpu => "CPU",
+            ResourceType.Gpu => "GPU",
+            _ => "Resource"
+        };
     }
 
     private static string FormatBytes(long bytes)
@@ -205,6 +351,19 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         _animationController.SetState(state);
         CharacterFrame = _animationController.CurrentFrame;
         _lastFrameAt = _animationClock.Elapsed;
+        UpdateAnimationRendering();
+    }
+
+    private void UpdateAnimationRendering()
+    {
+        if (_animationController.IsAnimated)
+        {
+            StartAnimationRendering();
+        }
+        else
+        {
+            StopAnimationRendering();
+        }
     }
 
     private void StartAnimationRendering()
@@ -254,4 +413,9 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     {
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
     }
+
+    private sealed record ResourceRefreshResult(
+        ResourceType ResourceType,
+        int UsagePercent,
+        IReadOnlyList<ProcessResourceUsage>? TopProcesses);
 }
