@@ -14,7 +14,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("PcMate")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+f879a0d480a57708f758b15ad8c04e508f3af4fc")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+7ad932ece2b7bfff52c86db869d854dc4cbf71d4")]
 [assembly: System.Reflection.AssemblyProductAttribute("PcMate")]
 [assembly: System.Reflection.AssemblyTitleAttribute("PcMate")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

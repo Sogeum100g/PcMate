@@ -21,6 +21,7 @@ public partial class MainWindow : Window
     private const double MaxSpeechBubbleWidth = 420;
     private const double MaxSpeechBubbleHeight = 240;
     private readonly WindowPlacementStore _windowPlacementStore;
+    private readonly AppSettingsStore _appSettingsStore;
     private readonly MainViewModel _viewModel;
 
     public MainWindow()
@@ -28,6 +29,7 @@ public partial class MainWindow : Window
         InitializeComponent();
 
         _windowPlacementStore = WindowPlacementStore.CreateDefault();
+        _appSettingsStore = AppSettingsStore.CreateDefault();
         _viewModel = new MainViewModel(
             new SystemResourceMonitor(),
             new TopProcessMonitor(),
@@ -47,8 +49,9 @@ public partial class MainWindow : Window
             }
         };
 
+        ApplySavedAppSettings();
         Loaded += (_, _) => _viewModel.Start();
-        Closing += (_, _) => SaveWindowPlacement();
+        Closing += (_, _) => SaveSettings();
         Closed += (_, _) => _viewModel.Dispose();
     }
 
@@ -77,25 +80,19 @@ public partial class MainWindow : Window
 
     private void OnResourceBarClick(object sender, RoutedEventArgs e)
     {
-        ResourceBarPanel.Visibility = ResourceBarMenuItem.IsChecked
-            ? Visibility.Visible
-            : Visibility.Collapsed;
+        ApplyResourceBarVisibility(ResourceBarMenuItem.IsChecked);
     }
 
     private void OnSpeechBubbleClick(object sender, RoutedEventArgs e)
     {
         _viewModel.SetSpeechBubbleEnabled(SpeechBubbleMenuItem.IsChecked);
-        SpeechBubble.Visibility = SpeechBubbleMenuItem.IsChecked
-            ? Visibility.Visible
-            : Visibility.Collapsed;
+        ApplySpeechBubbleVisibility(SpeechBubbleMenuItem.IsChecked);
         UpdateCharacterOverlayPlacement();
     }
 
     private void OnImageBorderClick(object sender, RoutedEventArgs e)
     {
-        CharacterImageBoundary.Visibility = ImageBorderMenuItem.IsChecked
-            ? Visibility.Visible
-            : Visibility.Collapsed;
+        ApplyImageBorderVisibility(ImageBorderMenuItem.IsChecked);
         UpdateCharacterOverlayPlacement();
     }
 
@@ -195,6 +192,59 @@ public partial class MainWindow : Window
         return Math.Abs(current - target) < 0.001;
     }
 
+    private void ApplyResourceBarVisibility(bool isVisible)
+    {
+        ResourceBarPanel.Visibility = isVisible ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private void ApplySpeechBubbleVisibility(bool isVisible)
+    {
+        SpeechBubble.Visibility = isVisible ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private void ApplyImageBorderVisibility(bool isVisible)
+    {
+        CharacterImageBoundary.Visibility = isVisible ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private void ApplySavedAppSettings()
+    {
+        AppSettings settings = _appSettingsStore.Load();
+
+        Topmost = settings.AlwaysOnTop;
+        AlwaysOnTopMenuItem.IsChecked = settings.AlwaysOnTop;
+
+        ResourceBarMenuItem.IsChecked = settings.ShowResourceBar;
+        ApplyResourceBarVisibility(settings.ShowResourceBar);
+
+        SpeechBubbleMenuItem.IsChecked = settings.ShowSpeechBubble;
+        _viewModel.SetSpeechBubbleEnabled(settings.ShowSpeechBubble);
+        ApplySpeechBubbleVisibility(settings.ShowSpeechBubble);
+
+        ImageBorderMenuItem.IsChecked = settings.ShowImageBorder;
+        ApplyImageBorderVisibility(settings.ShowImageBorder);
+
+        SpeechBubbleBody.Width = Math.Clamp(settings.SpeechBubbleWidth, MinSpeechBubbleWidth, MaxSpeechBubbleWidth);
+        SpeechBubbleBody.Height = Math.Clamp(settings.SpeechBubbleHeight, MinSpeechBubbleHeight, MaxSpeechBubbleHeight);
+
+        if (_viewModel.SelectCharacter(settings.CharacterId))
+        {
+            UpdateCharacterMenuChecks(settings.CharacterId);
+        }
+        else
+        {
+            UpdateCharacterMenuChecks(_viewModel.CurrentCharacterId);
+        }
+
+        _viewModel.SelectResource(settings.SelectedResourceType);
+        UpdateResourceMenuChecks(_viewModel.SelectedResourceType);
+
+        _viewModel.SetAnimationSpeedMultiplier(settings.AnimationSpeedMultiplier);
+        UpdateAnimationSpeedMenuChecks(_viewModel.AnimationSpeedMultiplier);
+
+        UpdateCharacterOverlayPlacement();
+    }
+
     private void UpdateCharacterOverlayPlacement()
     {
         if (!TryGetDisplayedImageBounds(out double imageWidth, out double imageHeight, out double imageTop))
@@ -258,9 +308,21 @@ public partial class MainWindow : Window
         Height = Math.Max(MinHeight, placement.Height);
     }
 
-    private void SaveWindowPlacement()
+    private void SaveSettings()
     {
         _windowPlacementStore.Save(new WindowPlacement(Left, Top, Width, Height));
+        _appSettingsStore.Save(new AppSettings
+        {
+            AlwaysOnTop = AlwaysOnTopMenuItem.IsChecked,
+            ShowResourceBar = ResourceBarMenuItem.IsChecked,
+            ShowSpeechBubble = SpeechBubbleMenuItem.IsChecked,
+            ShowImageBorder = ImageBorderMenuItem.IsChecked,
+            SelectedResourceType = _viewModel.SelectedResourceType,
+            CharacterId = _viewModel.CurrentCharacterId,
+            AnimationSpeedMultiplier = _viewModel.AnimationSpeedMultiplier,
+            SpeechBubbleWidth = SpeechBubbleBody.ActualWidth > 0 ? SpeechBubbleBody.ActualWidth : SpeechBubbleBody.Width,
+            SpeechBubbleHeight = SpeechBubbleBody.ActualHeight > 0 ? SpeechBubbleBody.ActualHeight : SpeechBubbleBody.Height
+        });
     }
 
     private static bool IsPlacementVisible(WindowPlacement placement)
