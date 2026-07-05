@@ -10,7 +10,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Resource Include="assets\app.ico" />
+    <Content Include="assets\app.ico" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="assets\characters\**\*.gif" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="assets\characters\**\*.ico" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>

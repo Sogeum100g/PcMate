@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("PcMate")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+a9677036c988d6a7d2df81880b5aeed2fbc794f9")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+19d121000b6e30f6b6b807ae614b7c008f97c67c")]
 [assembly: System.Reflection.AssemblyProductAttribute("PcMate")]
 [assembly: System.Reflection.AssemblyTitleAttribute("PcMate")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

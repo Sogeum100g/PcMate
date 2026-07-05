@@ -5,6 +5,7 @@ using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using PcMate.Models;
 using PcMate.Monitors;
 using PcMate.Services;
@@ -27,6 +28,7 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        ApplyApplicationIcon();
 
         _windowPlacementStore = WindowPlacementStore.CreateDefault();
         _appSettingsStore = AppSettingsStore.CreateDefault();
@@ -64,6 +66,17 @@ public partial class MainWindow : Window
             e.Handled = true;
             DragMove();
         }
+    }
+
+    private void ApplyApplicationIcon()
+    {
+        string iconPath = Path.Combine(AppContext.BaseDirectory, "assets", "app.ico");
+        if (!File.Exists(iconPath))
+        {
+            return;
+        }
+
+        Icon = BitmapFrame.Create(new Uri(iconPath, UriKind.Absolute));
     }
 
     private void OnResizeThumbDragDelta(object sender, DragDeltaEventArgs e)

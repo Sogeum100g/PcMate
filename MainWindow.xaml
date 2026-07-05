@@ -14,8 +14,7 @@
     ResizeMode="NoResize"
     ShowInTaskbar="True"
     WindowStartupLocation="CenterScreen"
-    WindowStyle="None"
-    Icon="assets/app.ico">
+    WindowStyle="None">
 
     <Grid Background="Transparent">
         <Grid.ContextMenu>
