@@ -95,6 +95,18 @@
                         IsCheckable="True"
                         Tag="2"
                         Click="OnAnimationSpeedMenuItemClick" />
+                    <MenuItem
+                        x:Name="SpeedTripleMenuItem"
+                        Header="3x"
+                        IsCheckable="True"
+                        Tag="3"
+                        Click="OnAnimationSpeedMenuItemClick" />
+                    <MenuItem
+                        x:Name="SpeedQuadrupleMenuItem"
+                        Header="4x"
+                        IsCheckable="True"
+                        Tag="4"
+                        Click="OnAnimationSpeedMenuItemClick" />
                 </MenuItem>
                 <Separator />
                 <MenuItem Header="Reset size" Click="OnResetSizeClick" />

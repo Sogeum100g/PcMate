@@ -401,6 +401,8 @@ public partial class MainWindow : Window
         SpeedNormalMenuItem.IsChecked = IsSpeedSelected(speedMultiplier, 1.0);
         SpeedOneAndHalfMenuItem.IsChecked = IsSpeedSelected(speedMultiplier, 1.5);
         SpeedDoubleMenuItem.IsChecked = IsSpeedSelected(speedMultiplier, 2.0);
+        SpeedTripleMenuItem.IsChecked = IsSpeedSelected(speedMultiplier, 3.0);
+        SpeedQuadrupleMenuItem.IsChecked = IsSpeedSelected(speedMultiplier, 4.0);
     }
 
     private static bool IsSpeedSelected(double current, double target)
