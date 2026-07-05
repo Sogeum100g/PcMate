@@ -62,6 +62,20 @@
                         Tag="Gpu"
                         Click="OnResourceMenuItemClick" />
                 </MenuItem>
+                <MenuItem Header="State thresholds">
+                    <MenuItem
+                        x:Name="MemoryThresholdMenuItem"
+                        Tag="Memory"
+                        Click="OnThresholdMenuItemClick" />
+                    <MenuItem
+                        x:Name="CpuThresholdMenuItem"
+                        Tag="Cpu"
+                        Click="OnThresholdMenuItemClick" />
+                    <MenuItem
+                        x:Name="GpuThresholdMenuItem"
+                        Tag="Gpu"
+                        Click="OnThresholdMenuItemClick" />
+                </MenuItem>
                 <MenuItem x:Name="CharacterMenuItem" Header="Character" />
                 <MenuItem Header="Animation speed">
                     <MenuItem

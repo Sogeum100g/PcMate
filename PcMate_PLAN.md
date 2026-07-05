@@ -466,7 +466,7 @@ public sealed class MemoryMonitor : IResourceMonitor
 
         <Border
             HorizontalAlignment="Right"
-            VerticalAlignment="Top"
+            VerticalAlignment="TOP"
             Margin="8"
             Padding="8"
             CornerRadius="8"

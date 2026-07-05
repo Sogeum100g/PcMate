@@ -23,6 +23,12 @@ public sealed class AppSettings
     public double SpeechBubbleWidth { get; init; } = 180;
 
     public double SpeechBubbleHeight { get; init; } = 64;
+
+    public ResourceThresholds MemoryThresholds { get; init; } = ResourceThresholds.Default;
+
+    public ResourceThresholds CpuThresholds { get; init; } = ResourceThresholds.Default;
+
+    public ResourceThresholds GpuThresholds { get; init; } = ResourceThresholds.Default;
 }
 
 public sealed class AppSettingsStore
@@ -88,7 +94,15 @@ public sealed class AppSettingsStore
                 : 180,
             SpeechBubbleHeight = double.IsFinite(settings.SpeechBubbleHeight) && settings.SpeechBubbleHeight > 0
                 ? settings.SpeechBubbleHeight
-                : 64
+                : 64,
+            MemoryThresholds = NormalizeThresholds(settings.MemoryThresholds),
+            CpuThresholds = NormalizeThresholds(settings.CpuThresholds),
+            GpuThresholds = NormalizeThresholds(settings.GpuThresholds)
         };
+    }
+
+    private static ResourceThresholds NormalizeThresholds(ResourceThresholds? thresholds)
+    {
+        return (thresholds ?? ResourceThresholds.Default).Normalize();
     }
 }

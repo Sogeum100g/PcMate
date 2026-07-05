@@ -10,9 +10,27 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Content Include="assets\app.ico" CopyToOutputDirectory="PreserveNewest" />
-    <Content Include="assets\characters\**\*.gif" CopyToOutputDirectory="PreserveNewest" />
-    <Content Include="assets\characters\**\*.ico" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="assets\app.ico" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="assets\characters\**\*.gif" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="assets\characters\**\*.ico" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="assets\characters\**\*.png" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="assets\characters\**\*.jpg" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="assets\characters\**\*.jpeg" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
+
+  <Target Name="CopyAppIconToPublishDirectory" AfterTargets="Publish">
+    <ItemGroup>
+      <PublishCharacterAssets Include="$(MSBuildProjectDirectory)\assets\characters\**\*.*" />
+    </ItemGroup>
+    <MakeDir Directories="$(PublishDir)assets" />
+    <Copy
+      SourceFiles="$(MSBuildProjectDirectory)\assets\app.ico"
+      DestinationFiles="$(PublishDir)assets\app.ico"
+      SkipUnchangedFiles="true" />
+    <Copy
+      SourceFiles="@(PublishCharacterAssets)"
+      DestinationFiles="@(PublishCharacterAssets->'$(PublishDir)assets\characters\%(RecursiveDir)%(Filename)%(Extension)')"
+      SkipUnchangedFiles="true" />
+  </Target>
 
 </Project>

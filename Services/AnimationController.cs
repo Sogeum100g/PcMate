@@ -37,13 +37,15 @@ public sealed partial class AnimationController
 
     public double SpeedMultiplier => _speedMultiplier;
 
-    public TimeSpan FrameInterval => ApplySpeedMultiplier(GetCurrentAnimation().FrameInterval);
+    public TimeSpan FrameInterval => _currentAnimation is null
+        ? TimeSpan.FromMilliseconds(100)
+        : ApplySpeedMultiplier(_currentAnimation.FrameInterval);
 
-    public bool IsAnimated => GetCurrentAnimation().Frames.Count > 1;
+    public bool IsAnimated => _currentAnimation?.Frames.Count > 1;
 
-    public ImageSource? CurrentFrame => GetCurrentAnimation().Frames.Count == 0
+    public ImageSource? CurrentFrame => _currentAnimation is null || _currentAnimation.Frames.Count == 0
         ? null
-        : GetCurrentAnimation().Frames[_frameIndex];
+        : _currentAnimation.Frames[_frameIndex];
 
     public bool SetCharacter(string characterId)
     {
@@ -154,24 +156,32 @@ public sealed partial class AnimationController
             return;
         }
 
-        AnimationConfig nextConfig = GetConfig(state);
-        if (_currentAnimation?.Name == nextConfig.Name)
+        _currentState = state;
+        _currentAnimation = null;
+        _frameIndex = 0;
+    }
+
+    public async Task<bool> LoadCurrentAnimationAsync()
+    {
+        string characterId = _currentCharacterId;
+        CharacterState state = _currentState;
+        AnimationConfig config = GetConfig(state);
+        AnimationDefinition animation = await LoadAnimationOnStaThreadAsync(config);
+
+        if (_currentCharacterId != characterId || _currentState != state)
         {
-            _currentAnimation = _currentAnimation with { FrameInterval = nextConfig.FrameInterval };
-        }
-        else
-        {
-            _currentAnimation = LoadAnimation(nextConfig);
+            return false;
         }
 
-        _currentState = state;
+        _currentAnimation = animation;
         _frameIndex = 0;
+        return true;
     }
 
     public ImageSource? MoveNext()
     {
-        AnimationDefinition animation = GetCurrentAnimation();
-        if (animation.Frames.Count == 0)
+        AnimationDefinition? animation = _currentAnimation;
+        if (animation is null || animation.Frames.Count == 0)
         {
             return null;
         }
@@ -221,6 +231,16 @@ public sealed partial class AnimationController
                     [CharacterState.Sitting] = new("kakao-ryan-standing", _builtInAssetRoot, ["kakao-ryan", "kakao-ryan-standing"], "kakao-ryan-standing", ".gif", TimeSpan.FromMilliseconds(80)),
                     [CharacterState.Walking] = new("kakao-ryan-walking", _builtInAssetRoot, ["kakao-ryan", "kakao-ryan-walking"], "kakao-ryan-walking", ".gif", TimeSpan.FromMilliseconds(55)),
                     [CharacterState.Running] = new("kakao-ryan-running", _builtInAssetRoot, ["kakao-ryan", "kakao-ryan-running"], "kakao-ryan-running", ".gif", TimeSpan.FromMilliseconds(45))
+                }),
+            ["speaki"] = new CharacterProfile(
+                "Speaki",
+                false,
+                new Dictionary<CharacterState, AnimationConfig>
+                {
+                    [CharacterState.Lying] = new("speaki-standing", _builtInAssetRoot, ["speaki", "speaki-standing"], "스피키 기본", ".gif", TimeSpan.FromMilliseconds(80)),
+                    [CharacterState.Sitting] = new("speaki-standing", _builtInAssetRoot, ["speaki", "speaki-standing"], "스피키 기본", ".gif", TimeSpan.FromMilliseconds(80)),
+                    [CharacterState.Walking] = new("speaki-walking", _builtInAssetRoot, ["speaki", "speaki-walking"], "스피키 걷기", ".gif", TimeSpan.FromMilliseconds(55)),
+                    [CharacterState.Running] = new("speaki-running", _builtInAssetRoot, ["speaki", "speaki-running"], "스피키 뛰기", ".png", TimeSpan.FromMilliseconds(45))
                 })
         };
 
@@ -282,16 +302,33 @@ public sealed partial class AnimationController
         return profile.Animations[CharacterState.Lying];
     }
 
-    private AnimationDefinition GetCurrentAnimation()
-    {
-        _currentAnimation ??= LoadAnimation(GetConfig(_currentState));
-        return _currentAnimation;
-    }
-
     private TimeSpan ApplySpeedMultiplier(TimeSpan frameInterval)
     {
         long ticks = Math.Max(1, (long)(frameInterval.Ticks / (_speedMultiplier * BaseSpeedScale)));
         return TimeSpan.FromTicks(ticks);
+    }
+
+    private static Task<AnimationDefinition> LoadAnimationOnStaThreadAsync(AnimationConfig config)
+    {
+        var completion = new TaskCompletionSource<AnimationDefinition>();
+        var thread = new Thread(() =>
+        {
+            try
+            {
+                completion.SetResult(LoadAnimation(config));
+            }
+            catch (Exception exception)
+            {
+                completion.SetException(exception);
+            }
+        })
+        {
+            IsBackground = true,
+            Name = "PcMate animation loader"
+        };
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.Start();
+        return completion.Task;
     }
 
     private static AnimationDefinition LoadAnimation(AnimationConfig config)

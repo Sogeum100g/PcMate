@@ -138,6 +138,31 @@ public partial class MainWindow : Window
         UpdateResourceMenuChecks(_viewModel.SelectedResourceType);
     }
 
+    private void OnThresholdMenuItemClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is not MenuItem menuItem
+            || menuItem.Tag is not string resourceText
+            || !Enum.TryParse(resourceText, out ResourceType resourceType))
+        {
+            return;
+        }
+
+        var thresholdWindow = new ResourceThresholdSettingsWindow(
+            resourceType,
+            _viewModel.GetThresholds(resourceType))
+        {
+            Owner = this
+        };
+
+        if (thresholdWindow.ShowDialog() != true)
+        {
+            return;
+        }
+
+        _viewModel.SetThresholds(resourceType, thresholdWindow.Thresholds);
+        UpdateThresholdMenuHeaders();
+    }
+
     private void OnCharacterMenuItemClick(object sender, RoutedEventArgs e)
     {
         if (sender is not MenuItem menuItem || menuItem.Tag is not string characterId)
@@ -394,6 +419,19 @@ public partial class MainWindow : Window
         GpuResourceMenuItem.IsChecked = resourceType == ResourceType.Gpu;
     }
 
+    private void UpdateThresholdMenuHeaders()
+    {
+        MemoryThresholdMenuItem.Header = BuildThresholdMenuHeader(ResourceType.Memory);
+        CpuThresholdMenuItem.Header = BuildThresholdMenuHeader(ResourceType.Cpu);
+        GpuThresholdMenuItem.Header = BuildThresholdMenuHeader(ResourceType.Gpu);
+    }
+
+    private string BuildThresholdMenuHeader(ResourceType resourceType)
+    {
+        ResourceThresholds thresholds = _viewModel.GetThresholds(resourceType);
+        return $"{GetResourceLabel(resourceType)}... ({thresholds.SittingPercent}/{thresholds.WalkingPercent}/{thresholds.RunningPercent})";
+    }
+
     private void UpdateAnimationSpeedMenuChecks(double speedMultiplier)
     {
         SpeedHalfMenuItem.IsChecked = IsSpeedSelected(speedMultiplier, 0.5);
@@ -441,6 +479,11 @@ public partial class MainWindow : Window
 
         ImageBorderMenuItem.IsChecked = settings.ShowImageBorder;
         ApplyImageBorderVisibility(settings.ShowImageBorder);
+
+        _viewModel.SetThresholds(ResourceType.Memory, settings.MemoryThresholds);
+        _viewModel.SetThresholds(ResourceType.Cpu, settings.CpuThresholds);
+        _viewModel.SetThresholds(ResourceType.Gpu, settings.GpuThresholds);
+        UpdateThresholdMenuHeaders();
 
         SpeechBubbleBody.Width = Math.Clamp(settings.SpeechBubbleWidth, MinSpeechBubbleWidth, MaxSpeechBubbleWidth);
         SpeechBubbleBody.Height = Math.Clamp(settings.SpeechBubbleHeight, MinSpeechBubbleHeight, MaxSpeechBubbleHeight);
@@ -539,8 +582,22 @@ public partial class MainWindow : Window
             CharacterId = _viewModel.CurrentCharacterId,
             AnimationSpeedMultiplier = _viewModel.AnimationSpeedMultiplier,
             SpeechBubbleWidth = SpeechBubbleBody.ActualWidth > 0 ? SpeechBubbleBody.ActualWidth : SpeechBubbleBody.Width,
-            SpeechBubbleHeight = SpeechBubbleBody.ActualHeight > 0 ? SpeechBubbleBody.ActualHeight : SpeechBubbleBody.Height
+            SpeechBubbleHeight = SpeechBubbleBody.ActualHeight > 0 ? SpeechBubbleBody.ActualHeight : SpeechBubbleBody.Height,
+            MemoryThresholds = _viewModel.GetThresholds(ResourceType.Memory),
+            CpuThresholds = _viewModel.GetThresholds(ResourceType.Cpu),
+            GpuThresholds = _viewModel.GetThresholds(ResourceType.Gpu)
         });
+    }
+
+    private static string GetResourceLabel(ResourceType resourceType)
+    {
+        return resourceType switch
+        {
+            ResourceType.Memory => "Memory",
+            ResourceType.Cpu => "CPU",
+            ResourceType.Gpu => "GPU",
+            _ => "Resource"
+        };
     }
 
     private static bool IsPlacementVisible(WindowPlacement placement)

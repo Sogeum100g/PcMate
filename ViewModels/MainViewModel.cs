@@ -21,6 +21,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     private readonly DispatcherTimer _refreshTimer;
     private readonly Stopwatch _animationClock = new();
     private TimeSpan _lastFrameAt;
+    private int _animationLoadVersion;
     private bool _isAnimationRendering;
     private bool _isRefreshRunning;
     private bool _refreshPending;
@@ -33,7 +34,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     private ResourceType _selectedResourceType = ResourceType.Memory;
     private CharacterState _characterState;
     private ImageSource? _characterFrame;
-    private string _speechBubbleText = "Memory TOP";
+    private string _speechBubbleText = BuildSpeechBubbleHeader(ResourceType.Memory);
 
     public MainViewModel(
         IResourceMonitor monitor,
@@ -142,10 +143,9 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     public void Start()
     {
         _hasStarted = true;
-        CharacterFrame = _animationController.CurrentFrame;
         _animationClock.Restart();
         _lastFrameAt = _animationClock.Elapsed;
-        UpdateAnimationRendering();
+        RequestAnimationLoad();
         _refreshTimer.Start();
         ScheduleTopProcessRefresh(TopProcessInitialDelay);
         _ = RefreshAsync();
@@ -166,9 +166,8 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             return false;
         }
 
-        CharacterFrame = _animationController.CurrentFrame;
         _lastFrameAt = _animationClock.Elapsed;
-        UpdateAnimationRendering();
+        RequestAnimationLoad();
         OnPropertyChanged(nameof(CurrentCharacterId));
         return true;
     }
@@ -201,9 +200,8 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             standingPath,
             walkingPath,
             runningPath);
-        CharacterFrame = _animationController.CurrentFrame;
         _lastFrameAt = _animationClock.Elapsed;
-        UpdateAnimationRendering();
+        RequestAnimationLoad();
         OnPropertyChanged(nameof(Characters));
         OnPropertyChanged(nameof(CurrentCharacterId));
         return character;
@@ -217,9 +215,8 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             return false;
         }
 
-        CharacterFrame = _animationController.CurrentFrame;
         _lastFrameAt = _animationClock.Elapsed;
-        UpdateAnimationRendering();
+        RequestAnimationLoad();
         OnPropertyChanged(nameof(Characters));
         OnPropertyChanged(nameof(CurrentCharacterId));
         return true;
@@ -256,13 +253,10 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         }
 
         SelectedResourceType = resourceType;
+        ResourceUsagePercent = 0;
         InvalidateTopProcessCache();
         ScheduleTopProcessRefresh(TopProcessInitialDelay);
-        if (_hasStarted)
-        {
-            _ = RefreshAsync();
-        }
-        else
+        if (!_hasStarted)
         {
             DelayInitialTopProcessRefresh();
         }
@@ -324,7 +318,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
                 }
 
                 ResourceUsagePercent = result.UsagePercent;
-                CharacterState nextState = _classifier.Classify(result.UsagePercent);
+                CharacterState nextState = _classifier.Classify(result.ResourceType, result.UsagePercent);
                 if (CharacterState != nextState)
                 {
                     SetCharacterState(nextState);
@@ -404,7 +398,25 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 
     private void InvalidateTopProcessCache()
     {
-        SpeechBubbleText = $"{GetResourceLabel(SelectedResourceType)} TOP";
+        SpeechBubbleText = BuildSpeechBubbleHeader(SelectedResourceType);
+    }
+
+    public ResourceThresholds GetThresholds(ResourceType resourceType)
+    {
+        return _classifier.GetThresholds(resourceType);
+    }
+
+    public void SetThresholds(ResourceType resourceType, ResourceThresholds thresholds)
+    {
+        _classifier.SetThresholds(resourceType, thresholds);
+        if (SelectedResourceType == resourceType)
+        {
+            CharacterState nextState = _classifier.Classify(resourceType, ResourceUsagePercent);
+            if (CharacterState != nextState)
+            {
+                SetCharacterState(nextState);
+            }
+        }
     }
 
     private void DelayInitialTopProcessRefresh()
@@ -430,10 +442,10 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 
     private static string BuildSpeechBubbleText(ResourceType resourceType, IReadOnlyList<ProcessResourceUsage> processes)
     {
-        string resourceLabel = GetResourceLabel(resourceType);
+        string header = BuildSpeechBubbleHeader(resourceType);
         if (processes.Count == 0)
         {
-            return $"{resourceLabel} TOP\nNo process data";
+            return $"{header}\nNo process data";
         }
 
         IEnumerable<string> lines = processes.Select((process, index) =>
@@ -446,7 +458,12 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             return $"{index + 1}. {process.DisplayName}{processCount} {usageText}";
         });
 
-        return $"{resourceLabel} TOP\n{string.Join('\n', lines)}";
+        return $"{header}\n{string.Join('\n', lines)}";
+    }
+
+    private static string BuildSpeechBubbleHeader(ResourceType resourceType)
+    {
+        return $"{GetResourceLabel(resourceType)} TOP";
     }
 
     private static string GetResourceLabel(ResourceType resourceType)
@@ -474,9 +491,38 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     {
         CharacterState = state;
         _animationController.SetState(state);
-        CharacterFrame = _animationController.CurrentFrame;
         _lastFrameAt = _animationClock.Elapsed;
-        UpdateAnimationRendering();
+        RequestAnimationLoad();
+    }
+
+    private void RequestAnimationLoad()
+    {
+        StopAnimationRendering();
+        int loadVersion = ++_animationLoadVersion;
+        _ = LoadAnimationAsync(loadVersion);
+    }
+
+    private async Task LoadAnimationAsync(int loadVersion)
+    {
+        try
+        {
+            bool loaded = await _animationController.LoadCurrentAnimationAsync();
+            if (_isDisposed || !loaded || loadVersion != _animationLoadVersion)
+            {
+                return;
+            }
+
+            CharacterFrame = _animationController.CurrentFrame;
+            _lastFrameAt = _animationClock.Elapsed;
+            UpdateAnimationRendering();
+        }
+        catch
+        {
+            if (loadVersion == _animationLoadVersion)
+            {
+                CharacterFrame = null;
+            }
+        }
     }
 
     private void UpdateAnimationRendering()
