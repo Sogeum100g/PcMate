@@ -30,14 +30,16 @@ public partial class MainWindow : Window
 
         _windowPlacementStore = WindowPlacementStore.CreateDefault();
         _appSettingsStore = AppSettingsStore.CreateDefault();
+        CustomCharacterStore customCharacterStore = CustomCharacterStore.CreateDefault();
         _viewModel = new MainViewModel(
             new SystemResourceMonitor(),
             new TopProcessMonitor(),
             new StateClassifier(),
-            new AnimationController(Path.Combine(AppContext.BaseDirectory, "assets", "characters")));
+            new AnimationController(Path.Combine(AppContext.BaseDirectory, "assets", "characters"), customCharacterStore));
 
         ApplySavedWindowPlacement();
         DataContext = _viewModel;
+        RebuildCharacterMenu();
         CharacterImage.SizeChanged += (_, _) => UpdateCharacterOverlayPlacement();
         SpeechBubble.SizeChanged += (_, _) => UpdateCharacterOverlayPlacement();
         CharacterStage.SizeChanged += (_, _) => UpdateCharacterOverlayPlacement();
@@ -138,6 +140,143 @@ public partial class MainWindow : Window
         {
             UpdateCharacterMenuChecks(_viewModel.CurrentCharacterId);
         }
+
+        RebuildCharacterMenu();
+    }
+
+    private void OnRegisterCustomCharacterClick(object sender, RoutedEventArgs e)
+    {
+        var registrationWindow = new CustomCharacterRegistrationWindow
+        {
+            Owner = this
+        };
+
+        if (registrationWindow.ShowDialog() != true)
+        {
+            return;
+        }
+
+        try
+        {
+            CharacterOption character = _viewModel.RegisterCustomCharacter(
+                registrationWindow.CharacterName,
+                registrationWindow.StandingImagePath,
+                registrationWindow.WalkingImagePath,
+                registrationWindow.RunningImagePath);
+            RebuildCharacterMenu();
+            _viewModel.SelectCharacter(character.Id);
+            UpdateCharacterMenuChecks(character.Id);
+        }
+        catch (Exception exception)
+        {
+            MessageBox.Show(
+                this,
+                exception.Message,
+                "PcMate",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+        }
+    }
+
+    private void OnEditCustomCharacterClick(object sender, RoutedEventArgs e)
+    {
+        IReadOnlyList<CharacterOption> customCharacters = GetCustomCharacters();
+        if (customCharacters.Count == 0)
+        {
+            ShowNoCustomCharactersMessage();
+            return;
+        }
+
+        var selectionWindow = new CustomCharacterEditSelectionWindow(customCharacters)
+        {
+            Owner = this
+        };
+        if (selectionWindow.ShowDialog() != true || selectionWindow.SelectedCharacterId is null)
+        {
+            return;
+        }
+
+        string characterId = selectionWindow.SelectedCharacterId;
+        CustomCharacterDefinition? definition = _viewModel.GetCustomCharacterDefinition(characterId);
+        if (definition is null)
+        {
+            return;
+        }
+
+        var registrationWindow = new CustomCharacterRegistrationWindow(definition)
+        {
+            Owner = this
+        };
+
+        if (registrationWindow.ShowDialog() != true)
+        {
+            return;
+        }
+
+        try
+        {
+            CharacterOption character = _viewModel.UpdateCustomCharacter(
+                characterId,
+                registrationWindow.CharacterName,
+                registrationWindow.StandingImagePath,
+                registrationWindow.WalkingImagePath,
+                registrationWindow.RunningImagePath);
+            RebuildCharacterMenu();
+            UpdateCharacterMenuChecks(character.Id);
+        }
+        catch (Exception exception)
+        {
+            MessageBox.Show(
+                this,
+                exception.Message,
+                "PcMate",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+        }
+    }
+
+    private void OnDeleteCustomCharacterClick(object sender, RoutedEventArgs e)
+    {
+        IReadOnlyList<CharacterOption> customCharacters = GetCustomCharacters();
+        if (customCharacters.Count == 0)
+        {
+            ShowNoCustomCharactersMessage();
+            return;
+        }
+
+        var selectionWindow = new CustomCharacterDeleteSelectionWindow(customCharacters)
+        {
+            Owner = this
+        };
+        if (selectionWindow.ShowDialog() != true)
+        {
+            return;
+        }
+
+        IReadOnlyList<CharacterOption> selectedCharacters = selectionWindow.SelectedCharacters;
+        string selectedNames = string.Join(", ", selectedCharacters.Select(character => character.DisplayName));
+        MessageBoxResult result = MessageBox.Show(
+            this,
+            $"Delete {selectedCharacters.Count} custom character(s)?\n{selectedNames}",
+            "PcMate",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Warning);
+        if (result != MessageBoxResult.Yes)
+        {
+            return;
+        }
+
+        bool deletedAny = false;
+        foreach (CharacterOption character in selectedCharacters)
+        {
+            deletedAny |= _viewModel.DeleteCustomCharacter(character.Id);
+        }
+
+        if (deletedAny)
+        {
+            RebuildCharacterMenu();
+            UpdateCharacterMenuChecks(_viewModel.CurrentCharacterId);
+        }
     }
 
     private void OnAnimationSpeedMenuItemClick(object sender, RoutedEventArgs e)
@@ -166,9 +305,73 @@ public partial class MainWindow : Window
 
     private void UpdateCharacterMenuChecks(string characterId)
     {
-        TailsCharacterMenuItem.IsChecked = characterId == "tails";
-        RedParrotCharacterMenuItem.IsChecked = characterId == "red_parrot";
-        KakaoRyanCharacterMenuItem.IsChecked = characterId == "kakao_ryan";
+        foreach (MenuItem menuItem in CharacterMenuItem.Items.OfType<MenuItem>())
+        {
+            if (menuItem.Tag is string menuCharacterId)
+            {
+                menuItem.IsChecked = menuCharacterId == characterId;
+            }
+        }
+    }
+
+    private void RebuildCharacterMenu()
+    {
+        CharacterMenuItem.Items.Clear();
+        foreach (CharacterOption character in _viewModel.Characters)
+        {
+            var menuItem = new MenuItem
+            {
+                Header = character.DisplayName,
+                IsCheckable = true,
+                Tag = character.Id
+            };
+            menuItem.Click += OnCharacterMenuItemClick;
+            CharacterMenuItem.Items.Add(menuItem);
+        }
+
+        CharacterMenuItem.Items.Add(new Separator());
+        var registerMenuItem = new MenuItem
+        {
+            Header = "Register custom character..."
+        };
+        registerMenuItem.Click += OnRegisterCustomCharacterClick;
+        CharacterMenuItem.Items.Add(registerMenuItem);
+
+        bool hasCustomCharacters = GetCustomCharacters().Count > 0;
+        var editMenuItem = new MenuItem
+        {
+            Header = "Edit custom character...",
+            IsEnabled = hasCustomCharacters
+        };
+        editMenuItem.Click += OnEditCustomCharacterClick;
+        CharacterMenuItem.Items.Add(editMenuItem);
+
+        var deleteMenuItem = new MenuItem
+        {
+            Header = "Delete custom characters...",
+            IsEnabled = hasCustomCharacters
+        };
+        deleteMenuItem.Click += OnDeleteCustomCharacterClick;
+        CharacterMenuItem.Items.Add(deleteMenuItem);
+
+        UpdateCharacterMenuChecks(_viewModel.CurrentCharacterId);
+    }
+
+    private IReadOnlyList<CharacterOption> GetCustomCharacters()
+    {
+        return _viewModel.Characters
+            .Where(character => character.IsCustom)
+            .ToList();
+    }
+
+    private void ShowNoCustomCharactersMessage()
+    {
+        MessageBox.Show(
+            this,
+            "No custom characters are registered.",
+            "PcMate",
+            MessageBoxButton.OK,
+            MessageBoxImage.Information);
     }
 
     private void UpdateResourceMenuChecks(ResourceType resourceType)

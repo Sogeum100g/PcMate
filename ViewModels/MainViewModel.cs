@@ -22,6 +22,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     private bool _isAnimationRendering;
     private bool _isRefreshRunning;
     private bool _refreshPending;
+    private bool _hasStarted;
     private bool _isDisposed;
     private bool _isSpeechBubbleEnabled;
     private DateTime _lastTopProcessRefreshAt = DateTime.MinValue;
@@ -139,6 +140,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 
     public void Start()
     {
+        _hasStarted = true;
         CharacterFrame = _animationController.CurrentFrame;
         _animationClock.Restart();
         _lastFrameAt = _animationClock.Elapsed;
@@ -169,6 +171,68 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         return true;
     }
 
+    public CharacterOption RegisterCustomCharacter(
+        string displayName,
+        string standingPath,
+        string walkingPath,
+        string runningPath)
+    {
+        CharacterOption character = _animationController.RegisterCustomCharacter(
+            displayName,
+            standingPath,
+            walkingPath,
+            runningPath);
+        OnPropertyChanged(nameof(Characters));
+        return character;
+    }
+
+    public CharacterOption UpdateCustomCharacter(
+        string characterId,
+        string displayName,
+        string standingPath,
+        string walkingPath,
+        string runningPath)
+    {
+        CharacterOption character = _animationController.UpdateCustomCharacter(
+            characterId,
+            displayName,
+            standingPath,
+            walkingPath,
+            runningPath);
+        CharacterFrame = _animationController.CurrentFrame;
+        _lastFrameAt = _animationClock.Elapsed;
+        UpdateAnimationRendering();
+        OnPropertyChanged(nameof(Characters));
+        OnPropertyChanged(nameof(CurrentCharacterId));
+        return character;
+    }
+
+    public bool DeleteCustomCharacter(string characterId)
+    {
+        bool deleted = _animationController.DeleteCustomCharacter(characterId);
+        if (!deleted)
+        {
+            return false;
+        }
+
+        CharacterFrame = _animationController.CurrentFrame;
+        _lastFrameAt = _animationClock.Elapsed;
+        UpdateAnimationRendering();
+        OnPropertyChanged(nameof(Characters));
+        OnPropertyChanged(nameof(CurrentCharacterId));
+        return true;
+    }
+
+    public bool IsCustomCharacter(string characterId)
+    {
+        return _animationController.IsCustomCharacter(characterId);
+    }
+
+    public CustomCharacterDefinition? GetCustomCharacterDefinition(string characterId)
+    {
+        return _animationController.GetCustomCharacterDefinition(characterId);
+    }
+
     public bool SetAnimationSpeedMultiplier(double speedMultiplier)
     {
         if (!_animationController.SetSpeedMultiplier(speedMultiplier))
@@ -191,7 +255,15 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 
         SelectedResourceType = resourceType;
         InvalidateTopProcessCache();
-        _ = RefreshAsync();
+        if (_hasStarted)
+        {
+            _ = RefreshAsync();
+        }
+        else
+        {
+            DelayInitialTopProcessRefresh();
+        }
+
         return true;
     }
 
@@ -205,8 +277,15 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         _isSpeechBubbleEnabled = isEnabled;
         if (_isSpeechBubbleEnabled)
         {
-            InvalidateTopProcessCache();
-            _ = RefreshAsync();
+            if (_hasStarted)
+            {
+                InvalidateTopProcessCache();
+                _ = RefreshAsync();
+            }
+            else
+            {
+                DelayInitialTopProcessRefresh();
+            }
         }
     }
 
@@ -300,6 +379,18 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     {
         _lastTopProcessRefreshAt = DateTime.MinValue;
         _lastTopProcessResourceType = null;
+        _lastTopProcesses = [];
+    }
+
+    private void DelayInitialTopProcessRefresh()
+    {
+        if (!_isSpeechBubbleEnabled)
+        {
+            return;
+        }
+
+        _lastTopProcessRefreshAt = DateTime.UtcNow;
+        _lastTopProcessResourceType = SelectedResourceType;
         _lastTopProcesses = [];
     }
 

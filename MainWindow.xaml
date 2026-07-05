@@ -63,27 +63,7 @@
                         Tag="Gpu"
                         Click="OnResourceMenuItemClick" />
                 </MenuItem>
-                <MenuItem Header="Character">
-                    <MenuItem
-                        x:Name="TailsCharacterMenuItem"
-                        Header="Tails"
-                        IsCheckable="True"
-                        IsChecked="True"
-                        Tag="tails"
-                        Click="OnCharacterMenuItemClick" />
-                    <MenuItem
-                        x:Name="RedParrotCharacterMenuItem"
-                        Header="Red Parrot"
-                        IsCheckable="True"
-                        Tag="red_parrot"
-                        Click="OnCharacterMenuItemClick" />
-                    <MenuItem
-                        x:Name="KakaoRyanCharacterMenuItem"
-                        Header="Kakao Ryan"
-                        IsCheckable="True"
-                        Tag="kakao_ryan"
-                        Click="OnCharacterMenuItemClick" />
-                </MenuItem>
+                <MenuItem x:Name="CharacterMenuItem" Header="Character" />
                 <MenuItem Header="Animation speed">
                     <MenuItem
                         x:Name="SpeedHalfMenuItem"

@@ -13,7 +13,8 @@ public sealed partial class AnimationController
     private const double BaseSpeedScale = 0.5;
     private const double MinSpeedMultiplier = 0.25;
     private const double MaxSpeedMultiplier = 4.0;
-    private readonly string _assetRoot;
+    private readonly string _builtInAssetRoot;
+    private readonly CustomCharacterStore _customCharacterStore;
     private readonly Dictionary<string, CharacterProfile> _profiles;
     private CharacterState _currentState = CharacterState.Lying;
     private string _currentCharacterId = "tails";
@@ -21,18 +22,16 @@ public sealed partial class AnimationController
     private int _frameIndex;
     private double _speedMultiplier = 1.0;
 
-    public AnimationController(string assetRoot)
+    public AnimationController(string builtInAssetRoot, CustomCharacterStore customCharacterStore)
     {
-        _assetRoot = assetRoot;
+        _builtInAssetRoot = builtInAssetRoot;
+        _customCharacterStore = customCharacterStore;
         _profiles = CreateProfiles();
     }
 
-    public IReadOnlyList<CharacterOption> Characters { get; } =
-    [
-        new CharacterOption("tails", "Tails"),
-        new CharacterOption("red_parrot", "Red Parrot"),
-        new CharacterOption("kakao_ryan", "Kakao Ryan")
-    ];
+    public IReadOnlyList<CharacterOption> Characters => _profiles
+        .Select(profile => new CharacterOption(profile.Key, profile.Value.DisplayName, profile.Value.IsCustom))
+        .ToList();
 
     public string CurrentCharacterId => _currentCharacterId;
 
@@ -71,6 +70,83 @@ public sealed partial class AnimationController
         return true;
     }
 
+    public CharacterOption RegisterCustomCharacter(
+        string displayName,
+        string standingPath,
+        string walkingPath,
+        string runningPath)
+    {
+        ThrowIfDuplicateCharacterName(displayName, exceptId: null);
+        CustomCharacterDefinition definition = _customCharacterStore.Register(
+            displayName,
+            standingPath,
+            walkingPath,
+            runningPath);
+
+        _profiles[definition.Id] = CreateCustomProfile(definition);
+        return new CharacterOption(definition.Id, definition.DisplayName, true);
+    }
+
+    public CharacterOption UpdateCustomCharacter(
+        string characterId,
+        string displayName,
+        string standingPath,
+        string walkingPath,
+        string runningPath)
+    {
+        if (!IsCustomCharacter(characterId))
+        {
+            throw new InvalidOperationException("Only custom characters can be edited.");
+        }
+
+        ThrowIfDuplicateCharacterName(displayName, exceptId: characterId);
+        CustomCharacterDefinition definition = _customCharacterStore.Update(
+            characterId,
+            displayName,
+            standingPath,
+            walkingPath,
+            runningPath);
+
+        _profiles[definition.Id] = CreateCustomProfile(definition);
+        if (_currentCharacterId == definition.Id)
+        {
+            _currentAnimation = null;
+            _frameIndex = 0;
+        }
+
+        return new CharacterOption(definition.Id, definition.DisplayName, true);
+    }
+
+    public bool DeleteCustomCharacter(string characterId)
+    {
+        if (!IsCustomCharacter(characterId))
+        {
+            return false;
+        }
+
+        _customCharacterStore.Delete(characterId);
+        _profiles.Remove(characterId);
+        if (_currentCharacterId == characterId)
+        {
+            _currentCharacterId = "tails";
+            _currentAnimation = null;
+            _frameIndex = 0;
+        }
+
+        return true;
+    }
+
+    public bool IsCustomCharacter(string characterId)
+    {
+        return _profiles.TryGetValue(characterId, out CharacterProfile? profile) && profile.IsCustom;
+    }
+
+    public CustomCharacterDefinition? GetCustomCharacterDefinition(string characterId)
+    {
+        return _customCharacterStore.Load()
+            .FirstOrDefault(definition => definition.Id.Equals(characterId, StringComparison.OrdinalIgnoreCase));
+    }
+
     public void SetState(CharacterState state)
     {
         if (_currentState == state)
@@ -85,7 +161,7 @@ public sealed partial class AnimationController
         }
         else
         {
-            _currentAnimation = LoadAnimation(_assetRoot, nextConfig);
+            _currentAnimation = LoadAnimation(nextConfig);
         }
 
         _currentState = state;
@@ -104,26 +180,31 @@ public sealed partial class AnimationController
         return CurrentFrame;
     }
 
-    private static Dictionary<string, CharacterProfile> CreateProfiles()
+    private Dictionary<string, CharacterProfile> CreateProfiles()
     {
         AnimationConfig redParrot = new(
             "red-parrot",
+            _builtInAssetRoot,
             ["red-parrot"],
             "red-parrot",
             ".ico",
             TimeSpan.FromMilliseconds(80));
 
-        return new Dictionary<string, CharacterProfile>
+        var profiles = new Dictionary<string, CharacterProfile>
         {
             ["tails"] = new CharacterProfile(
+                "Tails",
+                false,
                 new Dictionary<CharacterState, AnimationConfig>
                 {
-                    [CharacterState.Lying] = new("tails-standing", ["tails", "tails-standing"], "tails-standing", ".gif", TimeSpan.FromMilliseconds(140)),
-                    [CharacterState.Sitting] = new("tails-standing", ["tails", "tails-standing"], "tails-standing", ".gif", TimeSpan.FromMilliseconds(140)),
-                    [CharacterState.Walking] = new("tails-walking", ["tails", "tails-walking"], "tails-walking", ".gif", TimeSpan.FromMilliseconds(55)),
-                    [CharacterState.Running] = new("tails-running", ["tails", "tails-running"], "tails-running", ".gif", TimeSpan.FromMilliseconds(40))
+                    [CharacterState.Lying] = new("tails-standing", _builtInAssetRoot, ["tails", "tails-standing"], "tails-standing", ".gif", TimeSpan.FromMilliseconds(140)),
+                    [CharacterState.Sitting] = new("tails-standing", _builtInAssetRoot, ["tails", "tails-standing"], "tails-standing", ".gif", TimeSpan.FromMilliseconds(140)),
+                    [CharacterState.Walking] = new("tails-walking", _builtInAssetRoot, ["tails", "tails-walking"], "tails-walking", ".gif", TimeSpan.FromMilliseconds(55)),
+                    [CharacterState.Running] = new("tails-running", _builtInAssetRoot, ["tails", "tails-running"], "tails-running", ".gif", TimeSpan.FromMilliseconds(40))
                 }),
             ["red_parrot"] = new CharacterProfile(
+                "Red Parrot",
+                false,
                 new Dictionary<CharacterState, AnimationConfig>
                 {
                     [CharacterState.Lying] = redParrot,
@@ -132,14 +213,62 @@ public sealed partial class AnimationController
                     [CharacterState.Running] = redParrot
                 }),
             ["kakao_ryan"] = new CharacterProfile(
+                "Kakao Ryan",
+                false,
                 new Dictionary<CharacterState, AnimationConfig>
                 {
-                    [CharacterState.Lying] = new("kakao-ryan-standing", ["kakao-ryan", "kakao-ryan-standing"], "kakao-ryan-standing", ".gif", TimeSpan.FromMilliseconds(80)),
-                    [CharacterState.Sitting] = new("kakao-ryan-standing", ["kakao-ryan", "kakao-ryan-standing"], "kakao-ryan-standing", ".gif", TimeSpan.FromMilliseconds(80)),
-                    [CharacterState.Walking] = new("kakao-ryan-walking", ["kakao-ryan", "kakao-ryan-walking"], "kakao-ryan-walking", ".gif", TimeSpan.FromMilliseconds(55)),
-                    [CharacterState.Running] = new("kakao-ryan-running", ["kakao-ryan", "kakao-ryan-running"], "kakao-ryan-running", ".gif", TimeSpan.FromMilliseconds(45))
+                    [CharacterState.Lying] = new("kakao-ryan-standing", _builtInAssetRoot, ["kakao-ryan", "kakao-ryan-standing"], "kakao-ryan-standing", ".gif", TimeSpan.FromMilliseconds(80)),
+                    [CharacterState.Sitting] = new("kakao-ryan-standing", _builtInAssetRoot, ["kakao-ryan", "kakao-ryan-standing"], "kakao-ryan-standing", ".gif", TimeSpan.FromMilliseconds(80)),
+                    [CharacterState.Walking] = new("kakao-ryan-walking", _builtInAssetRoot, ["kakao-ryan", "kakao-ryan-walking"], "kakao-ryan-walking", ".gif", TimeSpan.FromMilliseconds(55)),
+                    [CharacterState.Running] = new("kakao-ryan-running", _builtInAssetRoot, ["kakao-ryan", "kakao-ryan-running"], "kakao-ryan-running", ".gif", TimeSpan.FromMilliseconds(45))
                 })
         };
+
+        foreach (CustomCharacterDefinition definition in _customCharacterStore.Load())
+        {
+            profiles[definition.Id] = CreateCustomProfile(definition);
+        }
+
+        return profiles;
+    }
+
+    private static CharacterProfile CreateCustomProfile(CustomCharacterDefinition definition)
+    {
+        return new CharacterProfile(
+            definition.DisplayName,
+            true,
+            new Dictionary<CharacterState, AnimationConfig>
+            {
+                [CharacterState.Lying] = CreateCustomConfig(definition, "standing", definition.StandingFileName, TimeSpan.FromMilliseconds(80)),
+                [CharacterState.Sitting] = CreateCustomConfig(definition, "standing", definition.StandingFileName, TimeSpan.FromMilliseconds(80)),
+                [CharacterState.Walking] = CreateCustomConfig(definition, "walking", definition.WalkingFileName, TimeSpan.FromMilliseconds(55)),
+                [CharacterState.Running] = CreateCustomConfig(definition, "running", definition.RunningFileName, TimeSpan.FromMilliseconds(45))
+            });
+    }
+
+    private static AnimationConfig CreateCustomConfig(
+        CustomCharacterDefinition definition,
+        string stateName,
+        string fileName,
+        TimeSpan frameInterval)
+    {
+        return new AnimationConfig(
+            $"{definition.Id}-{stateName}",
+            definition.DirectoryPath,
+            [stateName],
+            Path.GetFileNameWithoutExtension(fileName),
+            Path.GetExtension(fileName),
+            frameInterval);
+    }
+
+    private void ThrowIfDuplicateCharacterName(string displayName, string? exceptId)
+    {
+        if (_profiles.Any(profile =>
+                !profile.Key.Equals(exceptId, StringComparison.OrdinalIgnoreCase)
+                && profile.Value.DisplayName.Equals(displayName.Trim(), StringComparison.OrdinalIgnoreCase)))
+        {
+            throw new InvalidOperationException("A character with the same name already exists.");
+        }
     }
 
     private AnimationConfig GetConfig(CharacterState state)
@@ -155,7 +284,7 @@ public sealed partial class AnimationController
 
     private AnimationDefinition GetCurrentAnimation()
     {
-        _currentAnimation ??= LoadAnimation(_assetRoot, GetConfig(_currentState));
+        _currentAnimation ??= LoadAnimation(GetConfig(_currentState));
         return _currentAnimation;
     }
 
@@ -165,17 +294,23 @@ public sealed partial class AnimationController
         return TimeSpan.FromTicks(ticks);
     }
 
-    private static AnimationDefinition LoadAnimation(string assetRoot, AnimationConfig config)
+    private static AnimationDefinition LoadAnimation(AnimationConfig config)
     {
-        string directory = Path.Combine([assetRoot, .. config.DirectoryParts]);
+        string directory = Path.Combine([config.RootPath, .. config.DirectoryParts]);
         if (!Directory.Exists(directory))
         {
             return new AnimationDefinition(config.Name, [], config.FrameInterval);
         }
 
+        string exactPath = Path.Combine(directory, $"{config.FilePrefix}{config.Extension}");
         if (config.Extension.Equals(".gif", StringComparison.OrdinalIgnoreCase))
         {
-            return LoadGifAnimation(directory, config);
+            return LoadGifAnimation(exactPath, config);
+        }
+
+        if (File.Exists(exactPath))
+        {
+            return new AnimationDefinition(config.Name, [(ImageSource)LoadBitmap(exactPath)], config.FrameInterval);
         }
 
         List<ImageSource> frames = Directory
@@ -187,9 +322,8 @@ public sealed partial class AnimationController
         return new AnimationDefinition(config.Name, frames, config.FrameInterval);
     }
 
-    private static AnimationDefinition LoadGifAnimation(string directory, AnimationConfig config)
+    private static AnimationDefinition LoadGifAnimation(string gifPath, AnimationConfig config)
     {
-        string gifPath = Path.Combine(directory, $"{config.FilePrefix}.gif");
         if (!File.Exists(gifPath))
         {
             return new AnimationDefinition(config.Name, [], config.FrameInterval);
@@ -366,10 +500,14 @@ public sealed partial class AnimationController
     [GeneratedRegex(@"-(\d+)$")]
     private static partial Regex FrameNumberRegex();
 
-    private sealed record CharacterProfile(IReadOnlyDictionary<CharacterState, AnimationConfig> Animations);
+    private sealed record CharacterProfile(
+        string DisplayName,
+        bool IsCustom,
+        IReadOnlyDictionary<CharacterState, AnimationConfig> Animations);
 
     private sealed record AnimationConfig(
         string Name,
+        string RootPath,
         string[] DirectoryParts,
         string FilePrefix,
         string Extension,
@@ -383,4 +521,4 @@ public sealed partial class AnimationController
     private sealed record GifFrameLayer(BitmapSource Source, Rect Bounds);
 }
 
-public sealed record CharacterOption(string Id, string DisplayName);
+public sealed record CharacterOption(string Id, string DisplayName, bool IsCustom = false);

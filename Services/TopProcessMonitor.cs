@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 using System.Text.RegularExpressions;
 using PcMate.Models;
 
@@ -6,6 +7,17 @@ namespace PcMate.Services;
 
 public sealed partial class TopProcessMonitor
 {
+    private const int SystemProcessInformation = 5;
+    private const int StatusSuccess = 0;
+    private const int NextEntryOffsetOffset = 0;
+    private const int PrivateWorkingSetSizeOffset = 8;
+    private const int InitialSystemProcessBufferLength = 1024 * 1024;
+    private const int MaxSystemProcessQueryAttempts = 6;
+    private const int UniqueProcessIdOffset64 = 80;
+    private const int UniqueProcessIdOffset32 = 68;
+    private const int StatusInfoLengthMismatch = unchecked((int)0xC0000004);
+    private const int StatusBufferTooSmall = unchecked((int)0xC0000023);
+
     private readonly Dictionary<int, CpuProcessSample> _previousCpuSamples = [];
     private DateTime _previousCpuCollectedAt = DateTime.UtcNow;
     private Dictionary<string, PerformanceCounter>? _gpuProcessCounters;
@@ -39,9 +51,16 @@ public sealed partial class TopProcessMonitor
             return [];
         }
 
-        return Process.GetProcesses()
-            .Select(TryReadProcess)
-            .OfType<ProcessSample>()
+        IReadOnlyList<ProcessSample> samples = GetPrivateWorkingSetSamples();
+        if (samples.Count == 0)
+        {
+            samples = Process.GetProcesses()
+                .Select(TryReadProcess)
+                .OfType<ProcessSample>()
+                .ToList();
+        }
+
+        return samples
             .GroupBy(process => process.ProcessName, StringComparer.OrdinalIgnoreCase)
             .Select(group => new ProcessResourceUsage(
                 GetDisplayName(group.Key),
@@ -170,6 +189,106 @@ public sealed partial class TopProcessMonitor
         }
     }
 
+    private static IReadOnlyList<ProcessSample> GetPrivateWorkingSetSamples()
+    {
+        Dictionary<int, string> processNames = GetProcessNamesById();
+        int bufferLength = InitialSystemProcessBufferLength;
+
+        for (int attempt = 0; attempt < MaxSystemProcessQueryAttempts; attempt++)
+        {
+            IntPtr buffer = IntPtr.Zero;
+
+            try
+            {
+                buffer = Marshal.AllocHGlobal(bufferLength);
+                int status = NtQuerySystemInformation(
+                    SystemProcessInformation,
+                    buffer,
+                    bufferLength,
+                    out int requiredLength);
+
+                if (status == StatusSuccess)
+                {
+                    return ReadPrivateWorkingSetSamples(buffer, processNames);
+                }
+
+                if (status != StatusInfoLengthMismatch && status != StatusBufferTooSmall)
+                {
+                    return [];
+                }
+
+                bufferLength = Math.Max(bufferLength * 2, requiredLength);
+            }
+            catch
+            {
+                return [];
+            }
+            finally
+            {
+                if (buffer != IntPtr.Zero)
+                {
+                    Marshal.FreeHGlobal(buffer);
+                }
+            }
+        }
+
+        return [];
+    }
+
+    private static Dictionary<int, string> GetProcessNamesById()
+    {
+        Dictionary<int, string> processNames = [];
+        foreach (Process process in Process.GetProcesses())
+        {
+            using (process)
+            {
+                try
+                {
+                    processNames[process.Id] = process.ProcessName;
+                }
+                catch
+                {
+                    // Processes can exit while the snapshot is being built.
+                }
+            }
+        }
+
+        return processNames;
+    }
+
+    private static IReadOnlyList<ProcessSample> ReadPrivateWorkingSetSamples(
+        IntPtr buffer,
+        IReadOnlyDictionary<int, string> processNames)
+    {
+        int uniqueProcessIdOffset = IntPtr.Size == 8
+            ? UniqueProcessIdOffset64
+            : UniqueProcessIdOffset32;
+        List<ProcessSample> samples = [];
+        IntPtr entry = buffer;
+
+        while (true)
+        {
+            int processId = (int)Marshal.ReadIntPtr(entry, uniqueProcessIdOffset).ToInt64();
+            long memoryBytes = Math.Max(0, Marshal.ReadInt64(entry, PrivateWorkingSetSizeOffset));
+            if (processId > 0
+                && memoryBytes > 0
+                && processNames.TryGetValue(processId, out string? processName))
+            {
+                samples.Add(new ProcessSample(processName, memoryBytes));
+            }
+
+            int nextEntryOffset = Marshal.ReadInt32(entry, NextEntryOffsetOffset);
+            if (nextEntryOffset == 0)
+            {
+                break;
+            }
+
+            entry = IntPtr.Add(entry, nextEntryOffset);
+        }
+
+        return samples;
+    }
+
     private static CpuProcessSample? TryReadCpuProcess(Process process, DateTime collectedAt)
     {
         using (process)
@@ -243,4 +362,11 @@ public sealed partial class TopProcessMonitor
 
     [GeneratedRegex(@"pid_(\d+)", RegexOptions.IgnoreCase)]
     private static partial Regex GpuProcessIdRegex();
+
+    [DllImport("ntdll.dll")]
+    private static extern int NtQuerySystemInformation(
+        int systemInformationClass,
+        IntPtr systemInformation,
+        int systemInformationLength,
+        out int returnLength);
 }
