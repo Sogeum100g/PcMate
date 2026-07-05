@@ -11,7 +11,9 @@ namespace PcMate.ViewModels;
 
 public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 {
-    private static readonly TimeSpan TopProcessRefreshInterval = TimeSpan.FromSeconds(3);
+    private static readonly TimeSpan ResourceRefreshInterval = TimeSpan.FromSeconds(3);
+    private static readonly TimeSpan TopProcessInitialDelay = TimeSpan.FromSeconds(5);
+    private static readonly TimeSpan TopProcessRefreshInterval = TimeSpan.FromSeconds(15);
     private readonly IResourceMonitor _monitor;
     private readonly TopProcessMonitor _topProcessMonitor;
     private readonly StateClassifier _classifier;
@@ -22,12 +24,11 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     private bool _isAnimationRendering;
     private bool _isRefreshRunning;
     private bool _refreshPending;
+    private bool _isTopProcessRefreshRunning;
     private bool _hasStarted;
     private bool _isDisposed;
     private bool _isSpeechBubbleEnabled;
-    private DateTime _lastTopProcessRefreshAt = DateTime.MinValue;
-    private ResourceType? _lastTopProcessResourceType;
-    private IReadOnlyList<ProcessResourceUsage> _lastTopProcesses = [];
+    private DateTime _nextTopProcessRefreshAt = DateTime.MaxValue;
     private int _resourceUsagePercent;
     private ResourceType _selectedResourceType = ResourceType.Memory;
     private CharacterState _characterState;
@@ -46,7 +47,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         _animationController = animationController;
         _refreshTimer = new DispatcherTimer
         {
-            Interval = TimeSpan.FromSeconds(1)
+            Interval = ResourceRefreshInterval
         };
         _refreshTimer.Tick += async (_, _) => await RefreshAsync();
     }
@@ -146,6 +147,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         _lastFrameAt = _animationClock.Elapsed;
         UpdateAnimationRendering();
         _refreshTimer.Start();
+        ScheduleTopProcessRefresh(TopProcessInitialDelay);
         _ = RefreshAsync();
     }
 
@@ -255,6 +257,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 
         SelectedResourceType = resourceType;
         InvalidateTopProcessCache();
+        ScheduleTopProcessRefresh(TopProcessInitialDelay);
         if (_hasStarted)
         {
             _ = RefreshAsync();
@@ -280,12 +283,17 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             if (_hasStarted)
             {
                 InvalidateTopProcessCache();
+                ScheduleTopProcessRefresh(TopProcessInitialDelay);
                 _ = RefreshAsync();
             }
             else
             {
                 DelayInitialTopProcessRefresh();
             }
+        }
+        else
+        {
+            _nextTopProcessRefreshAt = DateTime.MaxValue;
         }
     }
 
@@ -304,8 +312,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             {
                 _refreshPending = false;
                 ResourceType selectedResourceType = SelectedResourceType;
-                bool includeTopProcesses = ShouldRefreshTopProcesses(selectedResourceType);
-                ResourceRefreshResult? result = await GetRefreshResultAsync(selectedResourceType, includeTopProcesses);
+                ResourceRefreshResult? result = await GetRefreshResultAsync(selectedResourceType);
                 if (_isDisposed)
                 {
                     return;
@@ -317,11 +324,15 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
                 }
 
                 ResourceUsagePercent = result.UsagePercent;
-                UpdateSpeechBubbleText(result);
                 CharacterState nextState = _classifier.Classify(result.UsagePercent);
                 if (CharacterState != nextState)
                 {
                     SetCharacterState(nextState);
+                }
+
+                if (ShouldRefreshTopProcesses(selectedResourceType))
+                {
+                    StartTopProcessRefresh(selectedResourceType);
                 }
             } while (_refreshPending);
         }
@@ -331,17 +342,14 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         }
     }
 
-    private async Task<ResourceRefreshResult?> GetRefreshResultAsync(ResourceType resourceType, bool includeTopProcesses)
+    private async Task<ResourceRefreshResult?> GetRefreshResultAsync(ResourceType resourceType)
     {
         try
         {
             return await Task.Run(() =>
             {
                 int usagePercent = _monitor.GetUsagePercent(resourceType);
-                IReadOnlyList<ProcessResourceUsage>? topProcesses = includeTopProcesses
-                    ? _topProcessMonitor.GetTopProcesses(resourceType, 2)
-                    : null;
-                return new ResourceRefreshResult(resourceType, usagePercent, topProcesses);
+                return new ResourceRefreshResult(resourceType, usagePercent);
             });
         }
         catch
@@ -353,33 +361,50 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 
     private bool ShouldRefreshTopProcesses(ResourceType resourceType)
     {
-        if (!_isSpeechBubbleEnabled)
+        if (!_isSpeechBubbleEnabled || _isTopProcessRefreshRunning)
         {
             return false;
         }
 
-        return _lastTopProcessResourceType != resourceType
-            || DateTime.UtcNow - _lastTopProcessRefreshAt >= TopProcessRefreshInterval;
+        return DateTime.UtcNow >= _nextTopProcessRefreshAt;
     }
 
-    private void UpdateSpeechBubbleText(ResourceRefreshResult result)
+    private void StartTopProcessRefresh(ResourceType resourceType)
     {
-        if (!_isSpeechBubbleEnabled || result.TopProcesses is null)
+        _isTopProcessRefreshRunning = true;
+        _nextTopProcessRefreshAt = DateTime.UtcNow + TopProcessRefreshInterval;
+        _ = RefreshTopProcessesAsync(resourceType);
+    }
+
+    private async Task RefreshTopProcessesAsync(ResourceType resourceType)
+    {
+        try
+        {
+            IReadOnlyList<ProcessResourceUsage> topProcesses = await Task.Run(() =>
+                _topProcessMonitor.GetTopProcesses(resourceType, 2));
+
+            if (_isDisposed
+                || !_isSpeechBubbleEnabled
+                || resourceType != SelectedResourceType)
+            {
+                return;
+            }
+
+            SpeechBubbleText = BuildSpeechBubbleText(resourceType, topProcesses);
+        }
+        catch
         {
             return;
         }
-
-        _lastTopProcessResourceType = result.ResourceType;
-        _lastTopProcesses = result.TopProcesses;
-        _lastTopProcessRefreshAt = DateTime.UtcNow;
-        SpeechBubbleText = BuildSpeechBubbleText(result.ResourceType, _lastTopProcesses);
+        finally
+        {
+            _isTopProcessRefreshRunning = false;
+        }
     }
 
     private void InvalidateTopProcessCache()
     {
-        _lastTopProcessRefreshAt = DateTime.MinValue;
-        _lastTopProcessResourceType = null;
-        _lastTopProcesses = [];
+        SpeechBubbleText = $"{GetResourceLabel(SelectedResourceType)} TOP";
     }
 
     private void DelayInitialTopProcessRefresh()
@@ -389,9 +414,18 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             return;
         }
 
-        _lastTopProcessRefreshAt = DateTime.UtcNow;
-        _lastTopProcessResourceType = SelectedResourceType;
-        _lastTopProcesses = [];
+        ScheduleTopProcessRefresh(TopProcessInitialDelay);
+    }
+
+    private void ScheduleTopProcessRefresh(TimeSpan delay)
+    {
+        if (!_isSpeechBubbleEnabled)
+        {
+            _nextTopProcessRefreshAt = DateTime.MaxValue;
+            return;
+        }
+
+        _nextTopProcessRefreshAt = DateTime.UtcNow + delay;
     }
 
     private static string BuildSpeechBubbleText(ResourceType resourceType, IReadOnlyList<ProcessResourceUsage> processes)
@@ -505,8 +539,5 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
     }
 
-    private sealed record ResourceRefreshResult(
-        ResourceType ResourceType,
-        int UsagePercent,
-        IReadOnlyList<ProcessResourceUsage>? TopProcesses);
+    private sealed record ResourceRefreshResult(ResourceType ResourceType, int UsagePercent);
 }
