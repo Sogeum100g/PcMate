@@ -9,13 +9,19 @@ namespace PcMate.Services;
 
 public sealed partial class AnimationController
 {
-    private const int DecodePixelWidth = 256;
+    private const int DecodePixelWidth = 192;
+    private const long MaxCachedAnimationBytes = 32L * 1024 * 1024;
+    private const string WildcardFilePrefix = "*";
     private const double BaseSpeedScale = 0.5;
     private const double MinSpeedMultiplier = 0.25;
     private const double MaxSpeedMultiplier = 4.0;
     private readonly string _builtInAssetRoot;
     private readonly CustomCharacterStore _customCharacterStore;
     private readonly Dictionary<string, CharacterProfile> _profiles;
+    private readonly Dictionary<string, CachedAnimation> _animationCache = [];
+    private readonly Dictionary<string, Task<AnimationDefinition>> _animationLoadTasks = [];
+    private long _animationCacheBytes;
+    private int _cacheVersion;
     private CharacterState _currentState = CharacterState.Lying;
     private string _currentCharacterId = "tails";
     private AnimationDefinition? _currentAnimation;
@@ -57,6 +63,7 @@ public sealed partial class AnimationController
         _currentCharacterId = characterId;
         _currentAnimation = null;
         _frameIndex = 0;
+        ClearAnimationCache();
         return true;
     }
 
@@ -114,6 +121,7 @@ public sealed partial class AnimationController
         {
             _currentAnimation = null;
             _frameIndex = 0;
+            ClearAnimationCache();
         }
 
         return new CharacterOption(definition.Id, definition.DisplayName, true);
@@ -133,6 +141,7 @@ public sealed partial class AnimationController
             _currentCharacterId = "tails";
             _currentAnimation = null;
             _frameIndex = 0;
+            ClearAnimationCache();
         }
 
         return true;
@@ -166,7 +175,7 @@ public sealed partial class AnimationController
         string characterId = _currentCharacterId;
         CharacterState state = _currentState;
         AnimationConfig config = GetConfig(state);
-        AnimationDefinition animation = await LoadAnimationOnStaThreadAsync(config);
+        AnimationDefinition animation = await GetOrLoadAnimationAsync(config);
 
         if (_currentCharacterId != characterId || _currentState != state)
         {
@@ -237,10 +246,10 @@ public sealed partial class AnimationController
                 false,
                 new Dictionary<CharacterState, AnimationConfig>
                 {
-                    [CharacterState.Lying] = new("speaki-standing", _builtInAssetRoot, ["speaki", "speaki-standing"], "스피키 기본", ".gif", TimeSpan.FromMilliseconds(80)),
-                    [CharacterState.Sitting] = new("speaki-standing", _builtInAssetRoot, ["speaki", "speaki-standing"], "스피키 기본", ".gif", TimeSpan.FromMilliseconds(80)),
-                    [CharacterState.Walking] = new("speaki-walking", _builtInAssetRoot, ["speaki", "speaki-walking"], "스피키 걷기", ".gif", TimeSpan.FromMilliseconds(55)),
-                    [CharacterState.Running] = new("speaki-running", _builtInAssetRoot, ["speaki", "speaki-running"], "스피키 뛰기", ".png", TimeSpan.FromMilliseconds(45))
+                    [CharacterState.Lying] = new("speaki-standing", _builtInAssetRoot, ["speaki", "speaki-standing"], WildcardFilePrefix, ".gif", TimeSpan.FromMilliseconds(80)),
+                    [CharacterState.Sitting] = new("speaki-standing", _builtInAssetRoot, ["speaki", "speaki-standing"], WildcardFilePrefix, ".gif", TimeSpan.FromMilliseconds(80)),
+                    [CharacterState.Walking] = new("speaki-walking", _builtInAssetRoot, ["speaki", "speaki-walking"], WildcardFilePrefix, ".gif", TimeSpan.FromMilliseconds(55)),
+                    [CharacterState.Running] = new("speaki-running", _builtInAssetRoot, ["speaki", "speaki-running"], WildcardFilePrefix, ".gif", TimeSpan.FromMilliseconds(45))
                 })
         };
 
@@ -308,6 +317,121 @@ public sealed partial class AnimationController
         return TimeSpan.FromTicks(ticks);
     }
 
+    private Task<AnimationDefinition> GetOrLoadAnimationAsync(AnimationConfig config)
+    {
+        string cacheKey = GetAnimationCacheKey(config);
+        lock (_animationCache)
+        {
+            if (_animationCache.TryGetValue(cacheKey, out CachedAnimation? cachedAnimation))
+            {
+                _animationCache[cacheKey] = cachedAnimation with { LastUsedAt = DateTime.UtcNow };
+                return Task.FromResult(cachedAnimation.Animation);
+            }
+
+            if (_animationLoadTasks.TryGetValue(cacheKey, out Task<AnimationDefinition>? loadTask))
+            {
+                return loadTask;
+            }
+
+            Task<AnimationDefinition> nextLoadTask = LoadAnimationOnStaThreadAsync(config);
+            _animationLoadTasks[cacheKey] = nextLoadTask;
+            int cacheVersion = _cacheVersion;
+            _ = nextLoadTask.ContinueWith(task =>
+            {
+                lock (_animationCache)
+                {
+                    _animationLoadTasks.Remove(cacheKey);
+                    if (task.Status == TaskStatus.RanToCompletion && cacheVersion == _cacheVersion)
+                    {
+                        CacheAnimation(cacheKey, task.Result);
+                    }
+                }
+            }, TaskScheduler.Default);
+            return nextLoadTask;
+        }
+    }
+
+    private void CacheAnimation(string cacheKey, AnimationDefinition animation)
+    {
+        long byteCost = EstimateByteCost(animation);
+        if (byteCost <= 0)
+        {
+            return;
+        }
+
+        if (_animationCache.Remove(cacheKey, out CachedAnimation? existing))
+        {
+            _animationCacheBytes -= existing.ByteCost;
+        }
+
+        if (byteCost > MaxCachedAnimationBytes)
+        {
+            _animationCache.Clear();
+            _animationCacheBytes = 0;
+            return;
+        }
+
+        _animationCache[cacheKey] = new CachedAnimation(animation, byteCost, DateTime.UtcNow);
+        _animationCacheBytes += byteCost;
+        TrimAnimationCache();
+    }
+
+    private void TrimAnimationCache()
+    {
+        while (_animationCacheBytes > MaxCachedAnimationBytes && _animationCache.Count > 0)
+        {
+            string oldestKey = _animationCache
+                .OrderBy(item => item.Value.LastUsedAt)
+                .Select(item => item.Key)
+                .First();
+
+            _animationCacheBytes -= _animationCache[oldestKey].ByteCost;
+            _animationCache.Remove(oldestKey);
+        }
+    }
+
+    private void ClearAnimationCache()
+    {
+        lock (_animationCache)
+        {
+            _animationCache.Clear();
+            _animationLoadTasks.Clear();
+            _animationCacheBytes = 0;
+            _cacheVersion++;
+        }
+    }
+
+    private static long EstimateByteCost(AnimationDefinition animation)
+    {
+        long byteCost = 0;
+        foreach (ImageSource frame in animation.Frames)
+        {
+            if (frame is BitmapSource bitmapSource)
+            {
+                int bytesPerPixel = Math.Max(1, bitmapSource.Format.BitsPerPixel / 8);
+                byteCost += (long)bitmapSource.PixelWidth * bitmapSource.PixelHeight * bytesPerPixel;
+            }
+        }
+
+        return byteCost;
+    }
+
+    private static string GetAnimationCacheKey(AnimationConfig config)
+    {
+        string directory = Path.Combine([config.RootPath, .. config.DirectoryParts]);
+        string? path = Directory.Exists(directory)
+            ? GetAnimationFilePath(directory, config)
+            : null;
+
+        if (path is null || !File.Exists(path))
+        {
+            return config.Name;
+        }
+
+        var fileInfo = new FileInfo(path);
+        return $"{config.Name}|{fileInfo.FullName}|{fileInfo.Length}|{fileInfo.LastWriteTimeUtc.Ticks}";
+    }
+
     private static Task<AnimationDefinition> LoadAnimationOnStaThreadAsync(AnimationConfig config)
     {
         var completion = new TaskCompletionSource<AnimationDefinition>();
@@ -324,7 +448,8 @@ public sealed partial class AnimationController
         })
         {
             IsBackground = true,
-            Name = "PcMate animation loader"
+            Name = "PcMate animation loader",
+            Priority = ThreadPriority.BelowNormal
         };
         thread.SetApartmentState(ApartmentState.STA);
         thread.Start();
@@ -339,7 +464,12 @@ public sealed partial class AnimationController
             return new AnimationDefinition(config.Name, [], config.FrameInterval);
         }
 
-        string exactPath = Path.Combine(directory, $"{config.FilePrefix}{config.Extension}");
+        string? exactPath = GetAnimationFilePath(directory, config);
+        if (exactPath is null)
+        {
+            return new AnimationDefinition(config.Name, [], config.FrameInterval);
+        }
+
         if (config.Extension.Equals(".gif", StringComparison.OrdinalIgnoreCase))
         {
             return LoadGifAnimation(exactPath, config);
@@ -357,6 +487,19 @@ public sealed partial class AnimationController
             .ToList();
 
         return new AnimationDefinition(config.Name, frames, config.FrameInterval);
+    }
+
+    private static string? GetAnimationFilePath(string directory, AnimationConfig config)
+    {
+        if (config.FilePrefix == WildcardFilePrefix)
+        {
+            return Directory
+                .GetFiles(directory, $"*{config.Extension}")
+                .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+                .FirstOrDefault();
+        }
+
+        return Path.Combine(directory, $"{config.FilePrefix}{config.Extension}");
     }
 
     private static AnimationDefinition LoadGifAnimation(string gifPath, AnimationConfig config)
@@ -384,8 +527,13 @@ public sealed partial class AnimationController
             return [];
         }
 
-        int canvasWidth = frames.Max(frame => GetFrameLeft(frame) + Math.Max(GetFrameWidth(frame), frame.PixelWidth));
-        int canvasHeight = frames.Max(frame => GetFrameTop(frame) + Math.Max(GetFrameHeight(frame), frame.PixelHeight));
+        int sourceCanvasWidth = frames.Max(frame => GetFrameLeft(frame) + Math.Max(GetFrameWidth(frame), frame.PixelWidth));
+        int sourceCanvasHeight = frames.Max(frame => GetFrameTop(frame) + Math.Max(GetFrameHeight(frame), frame.PixelHeight));
+        double renderScale = sourceCanvasWidth > DecodePixelWidth
+            ? DecodePixelWidth / (double)sourceCanvasWidth
+            : 1.0;
+        int canvasWidth = Math.Max(1, (int)Math.Round(sourceCanvasWidth * renderScale));
+        int canvasHeight = Math.Max(1, (int)Math.Round(sourceCanvasHeight * renderScale));
         if (canvasWidth <= 0 || canvasHeight <= 0)
         {
             return frames.Select(frame => CreateGifFrameSource(frame)).ToList();
@@ -397,7 +545,11 @@ public sealed partial class AnimationController
         {
             var layer = new GifFrameLayer(
                 frame,
-                new Rect(GetFrameLeft(frame), GetFrameTop(frame), frame.PixelWidth, frame.PixelHeight));
+                new Rect(
+                    GetFrameLeft(frame) * renderScale,
+                    GetFrameTop(frame) * renderScale,
+                    frame.PixelWidth * renderScale,
+                    frame.PixelHeight * renderScale));
             layers.Add(layer);
 
             RenderTargetBitmap compositedFrame = RenderGifFrame(canvasWidth, canvasHeight, layers);
@@ -556,6 +708,11 @@ public sealed partial class AnimationController
         TimeSpan FrameInterval);
 
     private sealed record GifFrameLayer(BitmapSource Source, Rect Bounds);
+
+    private sealed record CachedAnimation(
+        AnimationDefinition Animation,
+        long ByteCost,
+        DateTime LastUsedAt);
 }
 
 public sealed record CharacterOption(string Id, string DisplayName, bool IsCustom = false);
