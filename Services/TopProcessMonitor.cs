@@ -22,6 +22,16 @@ public sealed partial class TopProcessMonitor
     private DateTime _previousCpuCollectedAt = DateTime.UtcNow;
     private Dictionary<string, PerformanceCounter>? _gpuProcessCounters;
 
+    private static readonly HashSet<string> HiddenProcessNames = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "Idle",
+        "Memory Compression",
+        "Registry",
+        "Secure System",
+        "System",
+        "System Idle Process"
+    };
+
     private static readonly Dictionary<string, string> DisplayNames = new(StringComparer.OrdinalIgnoreCase)
     {
         ["chrome"] = "Chrome",
@@ -61,6 +71,7 @@ public sealed partial class TopProcessMonitor
         }
 
         return samples
+            .Where(process => ShouldShowProcess(process.ProcessName))
             .GroupBy(process => process.ProcessName, StringComparer.OrdinalIgnoreCase)
             .Select(group => new ProcessResourceUsage(
                 GetDisplayName(group.Key),
@@ -111,6 +122,7 @@ public sealed partial class TopProcessMonitor
         _previousCpuCollectedAt = collectedAt;
 
         return usages
+            .Where(process => ShouldShowProcess(process.ProcessName))
             .GroupBy(process => process.ProcessName, StringComparer.OrdinalIgnoreCase)
             .Select(group => new ProcessResourceUsage(
                 GetDisplayName(group.Key),
@@ -158,6 +170,7 @@ public sealed partial class TopProcessMonitor
             return usageByProcessId
                 .Select(pair => TryCreateGpuUsage(pair.Key, pair.Value))
                 .OfType<ProcessResourceUsage>()
+                .Where(process => ShouldShowProcess(process.DisplayName))
                 .GroupBy(process => process.DisplayName, StringComparer.OrdinalIgnoreCase)
                 .Select(group => new ProcessResourceUsage(
                     group.Key,
@@ -331,6 +344,11 @@ public sealed partial class TopProcessMonitor
         try
         {
             using Process process = Process.GetProcessById(processId);
+            if (!ShouldShowProcess(process.ProcessName))
+            {
+                return null;
+            }
+
             return new ProcessResourceUsage(
                 GetDisplayName(process.ProcessName),
                 1,
@@ -341,6 +359,12 @@ public sealed partial class TopProcessMonitor
         {
             return null;
         }
+    }
+
+    private static bool ShouldShowProcess(string processName)
+    {
+        return !string.IsNullOrWhiteSpace(processName)
+            && !HiddenProcessNames.Contains(processName);
     }
 
     private static string GetDisplayName(string processName)
