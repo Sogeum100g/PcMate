@@ -463,7 +463,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 
     private static string BuildSpeechBubbleHeader(ResourceType resourceType)
     {
-        return $"{GetResourceLabel(resourceType)} TOP";
+        return $"{GetResourceLabel(resourceType)} 빌런";
     }
 
     private static string GetResourceLabel(ResourceType resourceType)

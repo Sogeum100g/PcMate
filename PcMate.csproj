@@ -18,6 +18,10 @@
     <Content Include="assets\characters\**\*.jpeg" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 
+  <Target Name="CleanPublishedCharacterAssets" BeforeTargets="Publish">
+    <RemoveDir Directories="$(PublishDir)assets\characters" />
+  </Target>
+
   <Target Name="CopyAppIconToPublishDirectory" AfterTargets="Publish">
     <ItemGroup>
       <PublishCharacterAssets Include="$(MSBuildProjectDirectory)\assets\characters\**\*.*" />

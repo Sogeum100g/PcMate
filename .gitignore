@@ -1,5 +1,7 @@
 bin/
 obj/
+artifacts/
+publish/
 .build-check/
 .build-check-project/
 
