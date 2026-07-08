@@ -2,7 +2,7 @@ using System.Globalization;
 using System.Windows;
 using PcMate.Models;
 
-namespace PcMate;
+namespace PcMate.Settings;
 
 public partial class ResourceThresholdSettingsWindow : Window
 {

@@ -1,7 +1,7 @@
 using System.Windows;
 using PcMate.Services;
 
-namespace PcMate;
+namespace PcMate.CustomCharacter;
 
 public partial class CustomCharacterEditSelectionWindow : Window
 {

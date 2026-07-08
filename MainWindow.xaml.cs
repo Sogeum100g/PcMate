@@ -6,9 +6,11 @@ using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using PcMate.CustomCharacter;
 using PcMate.Models;
 using PcMate.Monitors;
 using PcMate.Services;
+using PcMate.Settings;
 using PcMate.ViewModels;
 
 namespace PcMate;

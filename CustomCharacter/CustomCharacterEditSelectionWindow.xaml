@@ -1,12 +1,12 @@
 <Window
-    x:Class="PcMate.CustomCharacterDeleteSelectionWindow"
+    x:Class="PcMate.CustomCharacter.CustomCharacterEditSelectionWindow"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    Title="Delete Characters"
-    Width="340"
-    Height="320"
-    MinWidth="320"
-    MinHeight="280"
+    Title="Edit Character"
+    Width="320"
+    Height="300"
+    MinWidth="300"
+    MinHeight="260"
     ResizeMode="NoResize"
     ShowInTaskbar="False"
     WindowStartupLocation="CenterOwner">
@@ -23,20 +23,12 @@
         <TextBlock
             Grid.Row="0"
             Foreground="#374151"
-            Text="Choose one or more custom characters to delete." />
+            Text="Choose a custom character to edit." />
 
         <ListBox
             x:Name="CharacterListBox"
-            Grid.Row="2">
-            <ListBox.ItemTemplate>
-                <DataTemplate>
-                    <CheckBox
-                        Padding="2"
-                        Content="{Binding Character.DisplayName}"
-                        IsChecked="{Binding IsSelected, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
-                </DataTemplate>
-            </ListBox.ItemTemplate>
-        </ListBox>
+            Grid.Row="2"
+            DisplayMemberPath="DisplayName" />
 
         <StackPanel
             Grid.Row="4"
@@ -49,9 +41,9 @@
                 IsCancel="True" />
             <Button
                 Width="80"
-                Content="Delete"
+                Content="Edit"
                 IsDefault="True"
-                Click="OnDeleteClick" />
+                Click="OnEditClick" />
         </StackPanel>
     </Grid>
 </Window>

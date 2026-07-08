@@ -3,7 +3,7 @@ using System.Windows;
 using Microsoft.Win32;
 using PcMate.Services;
 
-namespace PcMate;
+namespace PcMate.CustomCharacter;
 
 public partial class CustomCharacterRegistrationWindow : Window
 {
