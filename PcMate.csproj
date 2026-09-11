@@ -5,17 +5,19 @@
     <TargetFramework>net8.0-windows</TargetFramework>
     <UseWPF>true</UseWPF>
     <ApplicationIcon>assets\app.ico</ApplicationIcon>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <SelfContained>true</SelfContained>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
   <ItemGroup>
     <None Update="assets\app.ico" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
-    <Content Include="assets\characters\**\*.gif" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
-    <Content Include="assets\characters\**\*.ico" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
-    <Content Include="assets\characters\**\*.png" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
-    <Content Include="assets\characters\**\*.jpg" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
-    <Content Include="assets\characters\**\*.jpeg" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="assets\characters\blob\**\*.gif" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="assets\characters\blob\**\*.ico" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="assets\characters\blob\**\*.png" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="assets\characters\blob\**\*.jpg" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="assets\characters\blob\**\*.jpeg" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 
   <Target Name="CleanPublishedCharacterAssets" BeforeTargets="Publish">
@@ -24,7 +26,7 @@
 
   <Target Name="CopyAppIconToPublishDirectory" AfterTargets="Publish">
     <ItemGroup>
-      <PublishCharacterAssets Include="$(MSBuildProjectDirectory)\assets\characters\**\*.*" />
+      <PublishCharacterAssets Include="$(MSBuildProjectDirectory)\assets\characters\blob\**\*.*" />
     </ItemGroup>
     <MakeDir Directories="$(PublishDir)assets" />
     <Copy
@@ -33,7 +35,7 @@
       SkipUnchangedFiles="true" />
     <Copy
       SourceFiles="@(PublishCharacterAssets)"
-      DestinationFiles="@(PublishCharacterAssets->'$(PublishDir)assets\characters\%(RecursiveDir)%(Filename)%(Extension)')"
+      DestinationFiles="@(PublishCharacterAssets->'$(PublishDir)assets\characters\blob\%(RecursiveDir)%(Filename)%(Extension)')"
       SkipUnchangedFiles="true" />
   </Target>
 
