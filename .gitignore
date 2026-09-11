@@ -4,9 +4,22 @@ artifacts/
 publish/
 .build-check/
 .build-check-project/
+assets/graphic-data/
+PcMate.Package/AppPackages/
+PcMate.Package/BundleArtifacts/
+PcMate.Package/bin/
+PcMate.Package/obj/
+PcMate.Package/*.user
+PcMate.Package/*.tmp
+PcMate.Package/*.cache
+PcMate.Package/*.pfx
 
 .vs/
 .vscode/
 
+.agents/
+.claude/
+
 *.user
 *.suo
+docs/
