@@ -50,6 +50,7 @@ public sealed partial class TopProcessMonitor
             ResourceType.Memory => GetTopMemoryProcesses(count),
             ResourceType.Cpu => GetTopCpuProcesses(count),
             ResourceType.Gpu => GetTopGpuProcesses(count),
+            ResourceType.Network => [],
             _ => GetTopMemoryProcesses(count)
         };
     }

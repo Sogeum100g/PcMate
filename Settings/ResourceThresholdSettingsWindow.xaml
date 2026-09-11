@@ -1,8 +1,9 @@
 <Window
     x:Class="PcMate.Settings.ResourceThresholdSettingsWindow"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:loc="clr-namespace:PcMate.Localization"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    Title="State Thresholds"
+    Title="{Binding [MenuStateThresholds], Source={x:Static loc:LocalizationManager.Instance}}"
     Width="360"
     Height="260"
     MinWidth="340"
@@ -30,7 +31,7 @@
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="120" />
             <ColumnDefinition Width="*" />
-            <ColumnDefinition Width="24" />
+            <ColumnDefinition Width="52" />
         </Grid.ColumnDefinitions>
 
         <TextBlock
@@ -44,7 +45,7 @@
             Grid.Row="2"
             Grid.Column="0"
             VerticalAlignment="Center"
-            Text="Sitting from" />
+            Text="{Binding [ThresholdStandingFrom], Source={x:Static loc:LocalizationManager.Instance}}" />
         <TextBox
             x:Name="SittingTextBox"
             Grid.Row="2"
@@ -53,6 +54,7 @@
             HorizontalAlignment="Right"
             MinHeight="26" />
         <TextBlock
+            x:Name="SittingUnitTextBlock"
             Grid.Row="2"
             Grid.Column="2"
             VerticalAlignment="Center"
@@ -62,7 +64,7 @@
             Grid.Row="4"
             Grid.Column="0"
             VerticalAlignment="Center"
-            Text="Walking from" />
+            Text="{Binding [ThresholdWalkingFrom], Source={x:Static loc:LocalizationManager.Instance}}" />
         <TextBox
             x:Name="WalkingTextBox"
             Grid.Row="4"
@@ -71,6 +73,7 @@
             HorizontalAlignment="Right"
             MinHeight="26" />
         <TextBlock
+            x:Name="WalkingUnitTextBlock"
             Grid.Row="4"
             Grid.Column="2"
             VerticalAlignment="Center"
@@ -80,7 +83,7 @@
             Grid.Row="6"
             Grid.Column="0"
             VerticalAlignment="Center"
-            Text="Running from" />
+            Text="{Binding [ThresholdRunningFrom], Source={x:Static loc:LocalizationManager.Instance}}" />
         <TextBox
             x:Name="RunningTextBox"
             Grid.Row="6"
@@ -89,6 +92,7 @@
             HorizontalAlignment="Right"
             MinHeight="26" />
         <TextBlock
+            x:Name="RunningUnitTextBlock"
             Grid.Row="6"
             Grid.Column="2"
             VerticalAlignment="Center"
@@ -102,11 +106,11 @@
             <Button
                 Width="80"
                 Margin="0,0,8,0"
-                Content="Cancel"
+                Content="{Binding [ActionCancel], Source={x:Static loc:LocalizationManager.Instance}}"
                 IsCancel="True" />
             <Button
                 Width="80"
-                Content="Save"
+                Content="{Binding [ActionSave], Source={x:Static loc:LocalizationManager.Instance}}"
                 IsDefault="True"
                 Click="OnSaveClick" />
         </StackPanel>

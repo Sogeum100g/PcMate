@@ -5,8 +5,10 @@ using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Effects;
 using System.Windows.Media.Imaging;
 using PcMate.CustomCharacter;
+using PcMate.Localization;
 using PcMate.Models;
 using PcMate.Monitors;
 using PcMate.Services;
@@ -19,13 +21,21 @@ public partial class MainWindow : Window
 {
     private const double DefaultWidth = 220;
     private const double DefaultHeight = 190;
-    private const double MinSpeechBubbleWidth = 110;
-    private const double MinSpeechBubbleHeight = 48;
-    private const double MaxSpeechBubbleWidth = 420;
-    private const double MaxSpeechBubbleHeight = 240;
+    private const double ResourceBarImageGap = 8;
+    private static readonly TimeSpan InteractionBubbleDuration = TimeSpan.FromSeconds(3);
+    private static readonly string[] CharacterClickMessageKeys = ["InteractionHello"];
+    private static readonly Color DarkTextColor = Color.FromRgb(0x11, 0x18, 0x27);
+    private static readonly Color LightTextColor = Color.FromRgb(0xF9, 0xFA, 0xFB);
     private readonly WindowPlacementStore _windowPlacementStore;
     private readonly AppSettingsStore _appSettingsStore;
     private readonly MainViewModel _viewModel;
+    private CancellationTokenSource? _interactionBubbleCancellation;
+    private Point? _characterMouseDownPosition;
+    private bool _isCharacterDragStarted;
+    private bool _hasSeenOnboarding;
+    private string _language = LocalizationManager.SystemLanguage;
+    private double? _heightWithoutSpeechBubble;
+    private double _speechBubbleLayoutHeight;
 
     public MainWindow()
     {
@@ -43,9 +53,8 @@ public partial class MainWindow : Window
 
         ApplySavedWindowPlacement();
         DataContext = _viewModel;
-        RebuildCharacterMenu();
         CharacterImage.SizeChanged += (_, _) => UpdateCharacterOverlayPlacement();
-        SpeechBubble.SizeChanged += (_, _) => UpdateCharacterOverlayPlacement();
+        SpeechBubble.SizeChanged += OnSpeechBubbleSizeChanged;
         CharacterStage.SizeChanged += (_, _) => UpdateCharacterOverlayPlacement();
         _viewModel.PropertyChanged += (_, e) =>
         {
@@ -56,18 +65,142 @@ public partial class MainWindow : Window
         };
 
         ApplySavedAppSettings();
-        Loaded += (_, _) => _viewModel.Start();
+        RebuildCharacterMenu();
+        Loaded += (_, _) =>
+        {
+            EnsureSpeechBubbleWindowExpansion();
+            _viewModel.Start();
+
+            if (!_hasSeenOnboarding)
+            {
+                Dispatcher.BeginInvoke((Action)ShowTutorial);
+            }
+        };
         Closing += (_, _) => SaveSettings();
-        Closed += (_, _) => _viewModel.Dispose();
+        Closed += (_, _) =>
+        {
+            CancelInteractionBubble();
+            _viewModel.Dispose();
+        };
     }
 
     private void OnCharacterMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
-        if (e.ButtonState == MouseButtonState.Pressed)
+        if (e.ChangedButton != MouseButton.Left || e.ButtonState != MouseButtonState.Pressed)
         {
-            e.Handled = true;
+            return;
+        }
+
+        _characterMouseDownPosition = e.GetPosition(this);
+        _isCharacterDragStarted = false;
+        CharacterImage.CaptureMouse();
+        e.Handled = true;
+    }
+
+    private void OnCharacterMouseMove(object sender, MouseEventArgs e)
+    {
+        if (_characterMouseDownPosition is not Point mouseDownPosition
+            || e.LeftButton != MouseButtonState.Pressed
+            || _isCharacterDragStarted)
+        {
+            return;
+        }
+
+        Point currentPosition = e.GetPosition(this);
+        double horizontalDistance = Math.Abs(currentPosition.X - mouseDownPosition.X);
+        double verticalDistance = Math.Abs(currentPosition.Y - mouseDownPosition.Y);
+        if (horizontalDistance < SystemParameters.MinimumHorizontalDragDistance
+            && verticalDistance < SystemParameters.MinimumVerticalDragDistance)
+        {
+            return;
+        }
+
+        _isCharacterDragStarted = true;
+        CharacterImage.ReleaseMouseCapture();
+        e.Handled = true;
+
+        try
+        {
             DragMove();
         }
+        catch (InvalidOperationException)
+        {
+            // The mouse button may have been released as the drag threshold was crossed.
+        }
+        finally
+        {
+            ResetCharacterPointerState();
+        }
+    }
+
+    private void OnCharacterMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+    {
+        if (e.ChangedButton != MouseButton.Left || _characterMouseDownPosition is null)
+        {
+            return;
+        }
+
+        bool shouldInteract = !_isCharacterDragStarted;
+        CharacterImage.ReleaseMouseCapture();
+        ResetCharacterPointerState();
+        e.Handled = true;
+
+        if (shouldInteract)
+        {
+            ShowRandomCharacterMessage();
+        }
+    }
+
+    private void ResetCharacterPointerState()
+    {
+        _characterMouseDownPosition = null;
+        _isCharacterDragStarted = false;
+    }
+
+    private async void ShowRandomCharacterMessage()
+    {
+        CancelInteractionBubble();
+        var cancellation = new CancellationTokenSource();
+        _interactionBubbleCancellation = cancellation;
+
+        string messageKey = CharacterClickMessageKeys[Random.Shared.Next(CharacterClickMessageKeys.Length)];
+        string message = LocalizationManager.Instance.Get(messageKey);
+        _viewModel.ShowInteractionMessage(message);
+        ApplySpeechBubbleVisibility(isVisible: true);
+        UpdateCharacterOverlayPlacement();
+
+        try
+        {
+            await Task.Delay(InteractionBubbleDuration, cancellation.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+
+        if (!ReferenceEquals(_interactionBubbleCancellation, cancellation))
+        {
+            return;
+        }
+
+        _interactionBubbleCancellation = null;
+        cancellation.Dispose();
+        _viewModel.ClearInteractionMessage();
+        ApplySpeechBubbleVisibility(SpeechBubbleMenuItem.IsChecked);
+        UpdateCharacterOverlayPlacement();
+    }
+
+    private void CancelInteractionBubble()
+    {
+        CancellationTokenSource? cancellation = _interactionBubbleCancellation;
+        _interactionBubbleCancellation = null;
+        if (cancellation is null)
+        {
+            return;
+        }
+
+        cancellation.Cancel();
+        cancellation.Dispose();
     }
 
     private void ApplyApplicationIcon()
@@ -87,7 +220,17 @@ public partial class MainWindow : Window
         double appliedHorizontalChange = Width - nextWidth;
         Left += appliedHorizontalChange;
         Width = nextWidth;
-        Height = Math.Max(MinHeight, Height + e.VerticalChange);
+
+        if (_heightWithoutSpeechBubble is double heightWithoutSpeechBubble)
+        {
+            double nextBaseHeight = Math.Max(MinHeight, heightWithoutSpeechBubble + e.VerticalChange);
+            Height += nextBaseHeight - heightWithoutSpeechBubble;
+            _heightWithoutSpeechBubble = nextBaseHeight;
+        }
+        else
+        {
+            Height = Math.Max(MinHeight, Height + e.VerticalChange);
+        }
     }
 
     private void OnAlwaysOnTopClick(object sender, RoutedEventArgs e)
@@ -113,18 +256,36 @@ public partial class MainWindow : Window
         UpdateCharacterOverlayPlacement();
     }
 
-    private void OnSpeechBubbleResizeThumbDragDelta(object sender, DragDeltaEventArgs e)
+    private void OnDarkModeClick(object sender, RoutedEventArgs e)
     {
-        SpeechBubbleBody.Width = Math.Clamp(
-            SpeechBubbleBody.ActualWidth + e.HorizontalChange,
-            MinSpeechBubbleWidth,
-            MaxSpeechBubbleWidth);
+        ApplyResourceTextTheme(DarkModeMenuItem.IsChecked);
+    }
 
-        SpeechBubbleBody.Height = Math.Clamp(
-            SpeechBubbleBody.ActualHeight + e.VerticalChange,
-            MinSpeechBubbleHeight,
-            MaxSpeechBubbleHeight);
-        UpdateCharacterOverlayPlacement();
+    private void OnLanguageMenuItemClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is not MenuItem { Tag: string language })
+        {
+            return;
+        }
+
+        _language = LocalizationManager.NormalizeLanguage(language);
+        LocalizationManager.Instance.SetLanguage(_language);
+        UpdateLanguageMenuChecks();
+        _viewModel.RefreshLocalizedText();
+        RebuildCharacterMenu();
+        UpdateThresholdMenuHeaders();
+        SaveSettings();
+    }
+
+    private void OnSpeechBubbleSizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        Dispatcher.BeginInvoke((Action)(() =>
+        {
+            double previousLayoutHeight = _speechBubbleLayoutHeight;
+            UpdateLayout();
+            UpdateSpeechBubbleWindowExpansion(previousLayoutHeight);
+            UpdateCharacterOverlayPlacement();
+        }));
     }
 
     private void OnResourceMenuItemClick(object sender, RoutedEventArgs e)
@@ -200,6 +361,7 @@ public partial class MainWindow : Window
         {
             CharacterOption character = _viewModel.RegisterCustomCharacter(
                 registrationWindow.CharacterName,
+                registrationWindow.SleepingImagePath,
                 registrationWindow.StandingImagePath,
                 registrationWindow.WalkingImagePath,
                 registrationWindow.RunningImagePath);
@@ -258,6 +420,7 @@ public partial class MainWindow : Window
             CharacterOption character = _viewModel.UpdateCustomCharacter(
                 characterId,
                 registrationWindow.CharacterName,
+                registrationWindow.SleepingImagePath,
                 registrationWindow.StandingImagePath,
                 registrationWindow.WalkingImagePath,
                 registrationWindow.RunningImagePath);
@@ -297,7 +460,10 @@ public partial class MainWindow : Window
         string selectedNames = string.Join(", ", selectedCharacters.Select(character => character.DisplayName));
         MessageBoxResult result = MessageBox.Show(
             this,
-            $"Delete {selectedCharacters.Count} custom character(s)?\n{selectedNames}",
+            LocalizationManager.Instance.Format(
+                "CharacterDeleteConfirm",
+                selectedCharacters.Count,
+                selectedNames),
             "PcMate",
             MessageBoxButton.YesNo,
             MessageBoxImage.Warning);
@@ -335,7 +501,36 @@ public partial class MainWindow : Window
     private void OnResetSizeClick(object sender, RoutedEventArgs e)
     {
         Width = DefaultWidth;
-        Height = DefaultHeight;
+        if (_heightWithoutSpeechBubble is double heightWithoutSpeechBubble)
+        {
+            Height += DefaultHeight - heightWithoutSpeechBubble;
+            _heightWithoutSpeechBubble = DefaultHeight;
+        }
+        else
+        {
+            Height = DefaultHeight;
+        }
+    }
+
+    private void OnHelpClick(object sender, RoutedEventArgs e)
+    {
+        ShowTutorial();
+    }
+
+    private void ShowTutorial()
+    {
+        Onboarding.OnboardingWindow tutorialWindow = new()
+        {
+            Owner = this
+        };
+
+        tutorialWindow.ShowDialog();
+
+        if (!_hasSeenOnboarding)
+        {
+            _hasSeenOnboarding = true;
+            SaveSettings();
+        }
     }
 
     private void OnExitClick(object sender, RoutedEventArgs e)
@@ -372,7 +567,7 @@ public partial class MainWindow : Window
         CharacterMenuItem.Items.Add(new Separator());
         var registerMenuItem = new MenuItem
         {
-            Header = "Register custom character..."
+            Header = LocalizationManager.Instance.Get("MenuRegisterCharacter")
         };
         registerMenuItem.Click += OnRegisterCustomCharacterClick;
         CharacterMenuItem.Items.Add(registerMenuItem);
@@ -380,7 +575,7 @@ public partial class MainWindow : Window
         bool hasCustomCharacters = GetCustomCharacters().Count > 0;
         var editMenuItem = new MenuItem
         {
-            Header = "Edit custom character...",
+            Header = LocalizationManager.Instance.Get("MenuEditCharacter"),
             IsEnabled = hasCustomCharacters
         };
         editMenuItem.Click += OnEditCustomCharacterClick;
@@ -388,7 +583,7 @@ public partial class MainWindow : Window
 
         var deleteMenuItem = new MenuItem
         {
-            Header = "Delete custom characters...",
+            Header = LocalizationManager.Instance.Get("MenuDeleteCharacters"),
             IsEnabled = hasCustomCharacters
         };
         deleteMenuItem.Click += OnDeleteCustomCharacterClick;
@@ -408,7 +603,7 @@ public partial class MainWindow : Window
     {
         MessageBox.Show(
             this,
-            "No custom characters are registered.",
+            LocalizationManager.Instance.Get("CharacterNoneRegistered"),
             "PcMate",
             MessageBoxButton.OK,
             MessageBoxImage.Information);
@@ -419,6 +614,7 @@ public partial class MainWindow : Window
         MemoryResourceMenuItem.IsChecked = resourceType == ResourceType.Memory;
         CpuResourceMenuItem.IsChecked = resourceType == ResourceType.Cpu;
         GpuResourceMenuItem.IsChecked = resourceType == ResourceType.Gpu;
+        NetworkResourceMenuItem.IsChecked = resourceType == ResourceType.Network;
     }
 
     private void UpdateThresholdMenuHeaders()
@@ -426,12 +622,26 @@ public partial class MainWindow : Window
         MemoryThresholdMenuItem.Header = BuildThresholdMenuHeader(ResourceType.Memory);
         CpuThresholdMenuItem.Header = BuildThresholdMenuHeader(ResourceType.Cpu);
         GpuThresholdMenuItem.Header = BuildThresholdMenuHeader(ResourceType.Gpu);
+        NetworkThresholdMenuItem.Header = BuildThresholdMenuHeader(ResourceType.Network);
     }
 
     private string BuildThresholdMenuHeader(ResourceType resourceType)
     {
         ResourceThresholds thresholds = _viewModel.GetThresholds(resourceType);
-        return $"{GetResourceLabel(resourceType)}... ({thresholds.SittingPercent}/{thresholds.WalkingPercent}/{thresholds.RunningPercent})";
+        return LocalizationManager.Instance.Format(
+            "ThresholdMenuFormat",
+            resourceType.GetLocalizedName(),
+            thresholds.SittingPercent,
+            thresholds.WalkingPercent,
+            thresholds.RunningPercent,
+            resourceType.GetThresholdUnit());
+    }
+
+    private void UpdateLanguageMenuChecks()
+    {
+        SystemLanguageMenuItem.IsChecked = _language == LocalizationManager.SystemLanguage;
+        EnglishLanguageMenuItem.IsChecked = _language == LocalizationManager.EnglishLanguage;
+        KoreanLanguageMenuItem.IsChecked = _language == LocalizationManager.KoreanLanguage;
     }
 
     private void UpdateAnimationSpeedMenuChecks(double speedMultiplier)
@@ -457,7 +667,82 @@ public partial class MainWindow : Window
 
     private void ApplySpeechBubbleVisibility(bool isVisible)
     {
-        SpeechBubble.Visibility = isVisible ? Visibility.Visible : Visibility.Collapsed;
+        if (isVisible)
+        {
+            if (SpeechBubble.Visibility != Visibility.Visible)
+            {
+                SpeechBubble.Visibility = Visibility.Visible;
+            }
+
+            EnsureSpeechBubbleWindowExpansion();
+            return;
+        }
+
+        CollapseSpeechBubbleWindowExpansion();
+        SpeechBubble.Visibility = Visibility.Collapsed;
+    }
+
+    private void EnsureSpeechBubbleWindowExpansion()
+    {
+        if (SpeechBubble.Visibility != Visibility.Visible || _heightWithoutSpeechBubble is not null)
+        {
+            return;
+        }
+
+        UpdateLayout();
+        double layoutHeight = SpeechBubbleHostRow.ActualHeight;
+        if (layoutHeight <= 0)
+        {
+            return;
+        }
+
+        _heightWithoutSpeechBubble = Height;
+        _speechBubbleLayoutHeight = layoutHeight;
+        Height += layoutHeight;
+        if (double.IsFinite(Top))
+        {
+            Top -= layoutHeight;
+        }
+    }
+
+    private void UpdateSpeechBubbleWindowExpansion(double previousLayoutHeight)
+    {
+        if (_heightWithoutSpeechBubble is null || SpeechBubble.Visibility != Visibility.Visible)
+        {
+            return;
+        }
+
+        double nextLayoutHeight = SpeechBubbleHostRow.ActualHeight;
+        double layoutDelta = nextLayoutHeight - previousLayoutHeight;
+        _speechBubbleLayoutHeight = nextLayoutHeight;
+        if (Math.Abs(layoutDelta) < 0.01)
+        {
+            return;
+        }
+
+        Height += layoutDelta;
+        if (double.IsFinite(Top))
+        {
+            Top -= layoutDelta;
+        }
+    }
+
+    private void CollapseSpeechBubbleWindowExpansion()
+    {
+        if (_heightWithoutSpeechBubble is not double heightWithoutSpeechBubble)
+        {
+            return;
+        }
+
+        double layoutHeight = _speechBubbleLayoutHeight;
+        Height = heightWithoutSpeechBubble;
+        if (double.IsFinite(Top))
+        {
+            Top += layoutHeight;
+        }
+
+        _heightWithoutSpeechBubble = null;
+        _speechBubbleLayoutHeight = 0;
     }
 
     private void ApplyImageBorderVisibility(bool isVisible)
@@ -465,9 +750,28 @@ public partial class MainWindow : Window
         CharacterImageBoundary.Visibility = isVisible ? Visibility.Visible : Visibility.Collapsed;
     }
 
+    private void ApplyResourceTextTheme(bool useDarkMode)
+    {
+        ResourceUsageTextBlock.Foreground = new SolidColorBrush(
+            useDarkMode ? LightTextColor : DarkTextColor);
+        ResourceUsageTextBlock.Effect = new DropShadowEffect
+        {
+            BlurRadius = 2,
+            Direction = 315,
+            Opacity = 0.9,
+            ShadowDepth = 1,
+            Color = useDarkMode ? DarkTextColor : LightTextColor
+        };
+    }
+
     private void ApplySavedAppSettings()
     {
         AppSettings settings = _appSettingsStore.Load();
+        _hasSeenOnboarding = settings.HasSeenOnboarding;
+        _language = LocalizationManager.NormalizeLanguage(settings.Language);
+        LocalizationManager.Instance.SetLanguage(_language);
+        UpdateLanguageMenuChecks();
+        _viewModel.RefreshLocalizedText();
 
         Topmost = settings.AlwaysOnTop;
         AlwaysOnTopMenuItem.IsChecked = settings.AlwaysOnTop;
@@ -482,13 +786,14 @@ public partial class MainWindow : Window
         ImageBorderMenuItem.IsChecked = settings.ShowImageBorder;
         ApplyImageBorderVisibility(settings.ShowImageBorder);
 
+        DarkModeMenuItem.IsChecked = settings.UseDarkMode;
+        ApplyResourceTextTheme(settings.UseDarkMode);
+
         _viewModel.SetThresholds(ResourceType.Memory, settings.MemoryThresholds);
         _viewModel.SetThresholds(ResourceType.Cpu, settings.CpuThresholds);
         _viewModel.SetThresholds(ResourceType.Gpu, settings.GpuThresholds);
+        _viewModel.SetThresholds(ResourceType.Network, settings.NetworkThresholds);
         UpdateThresholdMenuHeaders();
-
-        SpeechBubbleBody.Width = Math.Clamp(settings.SpeechBubbleWidth, MinSpeechBubbleWidth, MaxSpeechBubbleWidth);
-        SpeechBubbleBody.Height = Math.Clamp(settings.SpeechBubbleHeight, MinSpeechBubbleHeight, MaxSpeechBubbleHeight);
 
         if (_viewModel.SelectCharacter(settings.CharacterId))
         {
@@ -521,11 +826,13 @@ public partial class MainWindow : Window
             CharacterImageBoundary.Height = imageHeight;
         }
 
-        if (SpeechBubble.Visibility == Visibility.Visible)
-        {
-            double speechBubbleTop = Math.Max(0, imageTop - SpeechBubble.ActualHeight + 2);
-            SpeechBubble.Margin = new Thickness(4, speechBubbleTop, 4, 0);
-        }
+        // CharacterImage sits centered in the image row, so any leftover height below the
+        // displayed image (before the row/margin ends) is dead space that pushes the resource
+        // bar away from the character as the window grows taller. Pull it up to compensate.
+        double bottomSlack = Math.Max(0, CharacterImage.ActualHeight - imageTop - imageHeight)
+            + CharacterStage.Margin.Bottom;
+        double resourceBarShift = Math.Max(0, bottomSlack - ResourceBarImageGap);
+        ResourceBarPanel.Margin = new Thickness(8, -resourceBarShift, 8, 4);
     }
 
     private bool TryGetDisplayedImageBounds(out double width, out double height, out double top)
@@ -573,33 +880,32 @@ public partial class MainWindow : Window
 
     private void SaveSettings()
     {
-        _windowPlacementStore.Save(new WindowPlacement(Left, Top, Width, Height));
+        double placementTop = Top;
+        double placementHeight = Height;
+        if (_heightWithoutSpeechBubble is double heightWithoutSpeechBubble)
+        {
+            placementTop += _speechBubbleLayoutHeight;
+            placementHeight = heightWithoutSpeechBubble;
+        }
+
+        _windowPlacementStore.Save(new WindowPlacement(Left, placementTop, Width, placementHeight));
         _appSettingsStore.Save(new AppSettings
         {
             AlwaysOnTop = AlwaysOnTopMenuItem.IsChecked,
             ShowResourceBar = ResourceBarMenuItem.IsChecked,
             ShowSpeechBubble = SpeechBubbleMenuItem.IsChecked,
             ShowImageBorder = ImageBorderMenuItem.IsChecked,
+            UseDarkMode = DarkModeMenuItem.IsChecked,
+            HasSeenOnboarding = _hasSeenOnboarding,
+            Language = _language,
             SelectedResourceType = _viewModel.SelectedResourceType,
             CharacterId = _viewModel.CurrentCharacterId,
             AnimationSpeedMultiplier = _viewModel.AnimationSpeedMultiplier,
-            SpeechBubbleWidth = SpeechBubbleBody.ActualWidth > 0 ? SpeechBubbleBody.ActualWidth : SpeechBubbleBody.Width,
-            SpeechBubbleHeight = SpeechBubbleBody.ActualHeight > 0 ? SpeechBubbleBody.ActualHeight : SpeechBubbleBody.Height,
             MemoryThresholds = _viewModel.GetThresholds(ResourceType.Memory),
             CpuThresholds = _viewModel.GetThresholds(ResourceType.Cpu),
-            GpuThresholds = _viewModel.GetThresholds(ResourceType.Gpu)
+            GpuThresholds = _viewModel.GetThresholds(ResourceType.Gpu),
+            NetworkThresholds = _viewModel.GetThresholds(ResourceType.Network)
         });
-    }
-
-    private static string GetResourceLabel(ResourceType resourceType)
-    {
-        return resourceType switch
-        {
-            ResourceType.Memory => "Memory",
-            ResourceType.Cpu => "CPU",
-            ResourceType.Gpu => "GPU",
-            _ => "Resource"
-        };
     }
 
     private static bool IsPlacementVisible(WindowPlacement placement)

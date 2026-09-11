@@ -1,4 +1,5 @@
 using System.Windows;
+using PcMate.Localization;
 using PcMate.Services;
 
 namespace PcMate.CustomCharacter;
@@ -24,7 +25,7 @@ public partial class CustomCharacterEditSelectionWindow : Window
         {
             MessageBox.Show(
                 this,
-                "Choose a custom character to edit.",
+                LocalizationManager.Instance.Get("CharacterEditDescription"),
                 "PcMate",
                 MessageBoxButton.OK,
                 MessageBoxImage.Information);

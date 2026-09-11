@@ -4,6 +4,7 @@ using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using PcMate.Models;
+using PcMate.Localization;
 
 namespace PcMate.Services;
 
@@ -21,7 +22,7 @@ public sealed partial class AnimationController
     private readonly Dictionary<string, CachedAnimation> _animationCache = [];
     private readonly Dictionary<string, Task<AnimationDefinition>> _animationLoadTasks = [];
     private CharacterState _currentState = CharacterState.Lying;
-    private string _currentCharacterId = "kakao-ryan";
+    private string _currentCharacterId = "blob";
     private AnimationDefinition? _currentAnimation;
     private int _frameIndex;
     private double _speedMultiplier = 1.0;
@@ -60,7 +61,6 @@ public sealed partial class AnimationController
 
     public bool SetCharacter(string characterId)
     {
-        characterId = ResolveBuiltInCharacterId(characterId);
         if (!_profiles.ContainsKey(characterId) || _currentCharacterId == characterId)
         {
             return false;
@@ -71,16 +71,6 @@ public sealed partial class AnimationController
         _frameIndex = 0;
         ClearAnimationCache();
         return true;
-    }
-
-    private static string ResolveBuiltInCharacterId(string characterId)
-    {
-        return characterId switch
-        {
-            "kakao_ryan" => "kakao-ryan",
-            "red_parrot" => "red-parrot",
-            _ => characterId
-        };
     }
 
     public bool SetSpeedMultiplier(double speedMultiplier)
@@ -97,6 +87,7 @@ public sealed partial class AnimationController
 
     public CharacterOption RegisterCustomCharacter(
         string displayName,
+        string sleepingPath,
         string standingPath,
         string walkingPath,
         string runningPath)
@@ -104,6 +95,7 @@ public sealed partial class AnimationController
         ThrowIfDuplicateCharacterName(displayName, exceptId: null);
         CustomCharacterDefinition definition = _customCharacterStore.Register(
             displayName,
+            sleepingPath,
             standingPath,
             walkingPath,
             runningPath);
@@ -115,19 +107,21 @@ public sealed partial class AnimationController
     public CharacterOption UpdateCustomCharacter(
         string characterId,
         string displayName,
+        string sleepingPath,
         string standingPath,
         string walkingPath,
         string runningPath)
     {
         if (!IsCustomCharacter(characterId))
         {
-            throw new InvalidOperationException("Only custom characters can be edited.");
+            throw new InvalidOperationException(LocalizationManager.Instance.Get("ErrorOnlyCustomEditable"));
         }
 
         ThrowIfDuplicateCharacterName(displayName, exceptId: characterId);
         CustomCharacterDefinition definition = _customCharacterStore.Update(
             characterId,
             displayName,
+            sleepingPath,
             standingPath,
             walkingPath,
             runningPath);
@@ -154,7 +148,7 @@ public sealed partial class AnimationController
         _profiles.Remove(characterId);
         if (_currentCharacterId == characterId)
         {
-            _currentCharacterId = "kakao-ryan";
+            _currentCharacterId = "blob";
             _currentAnimation = null;
             _frameIndex = 0;
             ClearAnimationCache();
@@ -217,65 +211,17 @@ public sealed partial class AnimationController
 
     private Dictionary<string, CharacterProfile> CreateProfiles()
     {
-        AnimationConfig redParrot = new(
-            "red-parrot",
-            _builtInAssetRoot,
-            ["red-parrot"],
-            "red-parrot",
-            ".ico",
-            TimeSpan.FromMilliseconds(80));
-
         var profiles = new Dictionary<string, CharacterProfile>
         {
-            ["tails"] = new CharacterProfile(
-                "Tails",
+            ["blob"] = new CharacterProfile(
+                "Blob",
                 false,
                 new Dictionary<CharacterState, AnimationConfig>
                 {
-                    [CharacterState.Lying] = new("tails-standing", _builtInAssetRoot, ["tails", "tails-standing"], "tails-standing", ".gif", TimeSpan.FromMilliseconds(140)),
-                    [CharacterState.Sitting] = new("tails-standing", _builtInAssetRoot, ["tails", "tails-standing"], "tails-standing", ".gif", TimeSpan.FromMilliseconds(140)),
-                    [CharacterState.Walking] = new("tails-walking", _builtInAssetRoot, ["tails", "tails-walking"], "tails-walking", ".gif", TimeSpan.FromMilliseconds(55)),
-                    [CharacterState.Running] = new("tails-running", _builtInAssetRoot, ["tails", "tails-running"], "tails-running", ".gif", TimeSpan.FromMilliseconds(40))
-                }),
-            ["red-parrot"] = new CharacterProfile(
-                "Red Parrot",
-                false,
-                new Dictionary<CharacterState, AnimationConfig>
-                {
-                    [CharacterState.Lying] = redParrot,
-                    [CharacterState.Sitting] = redParrot,
-                    [CharacterState.Walking] = redParrot,
-                    [CharacterState.Running] = redParrot
-                }),
-            ["kakao-ryan"] = new CharacterProfile(
-                "Kakao Ryan",
-                false,
-                new Dictionary<CharacterState, AnimationConfig>
-                {
-                    [CharacterState.Lying] = new("kakao-ryan-standing", _builtInAssetRoot, ["kakao-ryan", "kakao-ryan-standing"], "kakao-ryan-standing", ".gif", TimeSpan.FromMilliseconds(80)),
-                    [CharacterState.Sitting] = new("kakao-ryan-standing", _builtInAssetRoot, ["kakao-ryan", "kakao-ryan-standing"], "kakao-ryan-standing", ".gif", TimeSpan.FromMilliseconds(80)),
-                    [CharacterState.Walking] = new("kakao-ryan-walking", _builtInAssetRoot, ["kakao-ryan", "kakao-ryan-walking"], "kakao-ryan-walking", ".gif", TimeSpan.FromMilliseconds(55)),
-                    [CharacterState.Running] = new("kakao-ryan-running", _builtInAssetRoot, ["kakao-ryan", "kakao-ryan-running"], "kakao-ryan-running", ".gif", TimeSpan.FromMilliseconds(45))
-                }),
-            ["speaki"] = new CharacterProfile(
-                "Speaki",
-                false,
-                new Dictionary<CharacterState, AnimationConfig>
-                {
-                    [CharacterState.Lying] = new("speaki-standing", _builtInAssetRoot, ["speaki", "speaki-standing"], WildcardFilePrefix, ".gif", TimeSpan.FromMilliseconds(80)),
-                    [CharacterState.Sitting] = new("speaki-standing", _builtInAssetRoot, ["speaki", "speaki-standing"], WildcardFilePrefix, ".gif", TimeSpan.FromMilliseconds(80)),
-                    [CharacterState.Walking] = new("speaki-walking", _builtInAssetRoot, ["speaki", "speaki-walking"], WildcardFilePrefix, ".gif", TimeSpan.FromMilliseconds(55)),
-                    [CharacterState.Running] = new("speaki-running", _builtInAssetRoot, ["speaki", "speaki-running"], WildcardFilePrefix, ".gif", TimeSpan.FromMilliseconds(45))
-                }),
-            ["dccon-speaki"] = new CharacterProfile(
-                "Dccon Speaki",
-                false,
-                new Dictionary<CharacterState, AnimationConfig>
-                {
-                    [CharacterState.Lying] = new("dccon-speaki-standing", _builtInAssetRoot, ["dccon-speaki", "standing"], "dccon-speaki-standing", ".gif", TimeSpan.FromMilliseconds(80)),
-                    [CharacterState.Sitting] = new("dccon-speaki-standing", _builtInAssetRoot, ["dccon-speaki", "standing"], "dccon-speaki-standing", ".gif", TimeSpan.FromMilliseconds(80)),
-                    [CharacterState.Walking] = new("dccon-speaki-walking", _builtInAssetRoot, ["dccon-speaki", "walking"], "dccon-speaki-walking", ".gif", TimeSpan.FromMilliseconds(55)),
-                    [CharacterState.Running] = new("dccon-speaki-running", _builtInAssetRoot, ["dccon-speaki", "running"], "dccon-speaki-running", ".gif", TimeSpan.FromMilliseconds(45))
+                    [CharacterState.Lying] = new("blob-sleeping", _builtInAssetRoot, ["blob", "blob-sleeping"], "blob-sleeping", ".gif", TimeSpan.FromMilliseconds(80)),
+                    [CharacterState.Sitting] = new("blob-standing", _builtInAssetRoot, ["blob", "blob-standing"], "blob-standing", ".gif", TimeSpan.FromMilliseconds(80)),
+                    [CharacterState.Walking] = new("blob-walking", _builtInAssetRoot, ["blob", "blob-walking"], "blob-walking", ".gif", TimeSpan.FromMilliseconds(55)),
+                    [CharacterState.Running] = new("blob-running", _builtInAssetRoot, ["blob", "blob-running"], "blob-running", ".gif", TimeSpan.FromMilliseconds(45))
                 })
         };
 
@@ -294,23 +240,36 @@ public sealed partial class AnimationController
             true,
             new Dictionary<CharacterState, AnimationConfig>
             {
-                [CharacterState.Lying] = CreateCustomConfig(definition, "standing", definition.StandingFileName, TimeSpan.FromMilliseconds(80)),
-                [CharacterState.Sitting] = CreateCustomConfig(definition, "standing", definition.StandingFileName, TimeSpan.FromMilliseconds(80)),
-                [CharacterState.Walking] = CreateCustomConfig(definition, "walking", definition.WalkingFileName, TimeSpan.FromMilliseconds(55)),
-                [CharacterState.Running] = CreateCustomConfig(definition, "running", definition.RunningFileName, TimeSpan.FromMilliseconds(45))
+                [CharacterState.Lying] = CreateCustomConfig(definition, CharacterState.Lying, TimeSpan.FromMilliseconds(80)),
+                [CharacterState.Sitting] = CreateCustomConfig(definition, CharacterState.Sitting, TimeSpan.FromMilliseconds(80)),
+                [CharacterState.Walking] = CreateCustomConfig(definition, CharacterState.Walking, TimeSpan.FromMilliseconds(55)),
+                [CharacterState.Running] = CreateCustomConfig(definition, CharacterState.Running, TimeSpan.FromMilliseconds(45))
             });
     }
 
     private static AnimationConfig CreateCustomConfig(
         CustomCharacterDefinition definition,
-        string stateName,
-        string fileName,
+        CharacterState requestedState,
         TimeSpan frameInterval)
     {
+        (CharacterState State, string StateName, string Path)[] candidates =
+        [
+            (CharacterState.Lying, CustomCharacterStore.SleepingState, CustomCharacterStore.GetSleepingPath(definition)),
+            (CharacterState.Sitting, CustomCharacterStore.StandingState, CustomCharacterStore.GetStandingPath(definition)),
+            (CharacterState.Walking, CustomCharacterStore.WalkingState, CustomCharacterStore.GetWalkingPath(definition)),
+            (CharacterState.Running, CustomCharacterStore.RunningState, CustomCharacterStore.GetRunningPath(definition))
+        ];
+        (CharacterState State, string StateName, string Path) selected = candidates
+            .Where(candidate => !string.IsNullOrWhiteSpace(candidate.Path))
+            .OrderBy(candidate => Math.Abs((int)candidate.State - (int)requestedState))
+            .ThenBy(candidate => (int)candidate.State)
+            .First();
+        string fileName = Path.GetFileName(selected.Path);
+
         return new AnimationConfig(
-            $"{definition.Id}-{stateName}",
+            $"{definition.Id}-{requestedState}-{selected.StateName}",
             definition.DirectoryPath,
-            [stateName],
+            [selected.StateName],
             Path.GetFileNameWithoutExtension(fileName),
             Path.GetExtension(fileName),
             frameInterval);
@@ -322,7 +281,7 @@ public sealed partial class AnimationController
                 !profile.Key.Equals(exceptId, StringComparison.OrdinalIgnoreCase)
                 && profile.Value.DisplayName.Equals(displayName.Trim(), StringComparison.OrdinalIgnoreCase)))
         {
-            throw new InvalidOperationException("A character with the same name already exists.");
+            throw new InvalidOperationException(LocalizationManager.Instance.Get("ErrorDuplicateCharacterName"));
         }
     }
 

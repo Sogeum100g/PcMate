@@ -8,15 +8,18 @@ public sealed class ResourceSnapshot
 
     public int GpuUsagePercent { get; init; }
 
+    public int NetworkReceiveMbps { get; init; }
+
     public DateTime CollectedAt { get; init; }
 
-    public int GetUsagePercent(ResourceType resourceType)
+    public int GetReading(ResourceType resourceType)
     {
         return resourceType switch
         {
             ResourceType.Memory => MemoryUsagePercent,
             ResourceType.Cpu => CpuUsagePercent,
             ResourceType.Gpu => GpuUsagePercent,
+            ResourceType.Network => NetworkReceiveMbps,
             _ => MemoryUsagePercent
         };
     }

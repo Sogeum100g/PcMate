@@ -1,0 +1,94 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype"><value>text/microsoft-resx</value></resheader>
+  <resheader name="version"><value>2.0</value></resheader>
+  <resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms</value></resheader>
+  <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms</value></resheader>
+
+  <data name="AppName" xml:space="preserve"><value>PcMate</value></data>
+  <data name="ActionBrowse" xml:space="preserve"><value>Browse</value></data>
+  <data name="ActionClear" xml:space="preserve"><value>Clear</value></data>
+  <data name="ActionCancel" xml:space="preserve"><value>Cancel</value></data>
+  <data name="ActionRegister" xml:space="preserve"><value>Register</value></data>
+  <data name="ActionSave" xml:space="preserve"><value>Save</value></data>
+  <data name="ActionEdit" xml:space="preserve"><value>Edit</value></data>
+  <data name="ActionDelete" xml:space="preserve"><value>Delete</value></data>
+  <data name="ActionBack" xml:space="preserve"><value>Back</value></data>
+  <data name="ActionSkip" xml:space="preserve"><value>Skip</value></data>
+  <data name="ActionContinue" xml:space="preserve"><value>Continue</value></data>
+  <data name="ActionDone" xml:space="preserve"><value>Done</value></data>
+
+  <data name="MenuAlwaysOnTop" xml:space="preserve"><value>Always on top</value></data>
+  <data name="MenuShowResourceBar" xml:space="preserve"><value>Show resource bar</value></data>
+  <data name="MenuShowSpeechBubble" xml:space="preserve"><value>Show speech bubble</value></data>
+  <data name="MenuShowImageBorder" xml:space="preserve"><value>Show image border</value></data>
+  <data name="MenuDarkMode" xml:space="preserve"><value>Dark mode</value></data>
+  <data name="MenuResource" xml:space="preserve"><value>Resource</value></data>
+  <data name="MenuStateThresholds" xml:space="preserve"><value>State thresholds</value></data>
+  <data name="MenuCharacter" xml:space="preserve"><value>Character</value></data>
+  <data name="MenuAnimationSpeed" xml:space="preserve"><value>Animation speed</value></data>
+  <data name="MenuLanguage" xml:space="preserve"><value>Language</value></data>
+  <data name="MenuHelpTutorial" xml:space="preserve"><value>Help / Tutorial</value></data>
+  <data name="MenuResetSize" xml:space="preserve"><value>Reset size</value></data>
+  <data name="MenuExit" xml:space="preserve"><value>Exit</value></data>
+  <data name="MenuRegisterCharacter" xml:space="preserve"><value>Register custom character...</value></data>
+  <data name="MenuEditCharacter" xml:space="preserve"><value>Edit custom character...</value></data>
+  <data name="MenuDeleteCharacters" xml:space="preserve"><value>Delete custom characters...</value></data>
+  <data name="LanguageSystem" xml:space="preserve"><value>System default</value></data>
+  <data name="LanguageEnglish" xml:space="preserve"><value>English</value></data>
+  <data name="LanguageKorean" xml:space="preserve"><value>한국어</value></data>
+
+  <data name="ResourceMemory" xml:space="preserve"><value>Memory</value></data>
+  <data name="ResourceCpu" xml:space="preserve"><value>CPU</value></data>
+  <data name="ResourceGpu" xml:space="preserve"><value>GPU</value></data>
+  <data name="ResourceNetwork" xml:space="preserve"><value>Network</value></data>
+  <data name="ResourceReadingFormat" xml:space="preserve"><value>{0} {1}</value></data>
+  <data name="ThresholdMenuFormat" xml:space="preserve"><value>{0}... ({1}/{2}/{3} {4})</value></data>
+
+  <data name="StateSleeping" xml:space="preserve"><value>Sleeping</value></data>
+  <data name="StateStanding" xml:space="preserve"><value>Standing</value></data>
+  <data name="StateWalking" xml:space="preserve"><value>Walking</value></data>
+  <data name="StateRunning" xml:space="preserve"><value>Running</value></data>
+
+  <data name="CharacterRegisterTitle" xml:space="preserve"><value>Register Character</value></data>
+  <data name="CharacterEditTitle" xml:space="preserve"><value>Edit Character</value></data>
+  <data name="CharacterRegisterDescription" xml:space="preserve"><value>Choose a menu name and at least one state image. Empty states use the nearest selected image.</value></data>
+  <data name="CharacterName" xml:space="preserve"><value>Name</value></data>
+  <data name="CharacterValidation" xml:space="preserve"><value>Enter a character name and choose at least one state image.</value></data>
+  <data name="ImageFileFilter" xml:space="preserve"><value>Image files (*.gif;*.png;*.jpg;*.jpeg)|*.gif;*.png;*.jpg;*.jpeg</value></data>
+  <data name="CharacterEditDescription" xml:space="preserve"><value>Choose a custom character to edit.</value></data>
+  <data name="CharacterDeleteTitle" xml:space="preserve"><value>Delete Characters</value></data>
+  <data name="CharacterDeleteDescription" xml:space="preserve"><value>Choose one or more custom characters to delete.</value></data>
+  <data name="CharacterDeleteSelectOne" xml:space="preserve"><value>Choose at least one custom character to delete.</value></data>
+  <data name="CharacterNoneRegistered" xml:space="preserve"><value>No custom characters are registered.</value></data>
+  <data name="CharacterDeleteConfirm" xml:space="preserve"><value>Delete {0} custom character(s)?&#10;{1}</value></data>
+
+  <data name="ThresholdWindowTitle" xml:space="preserve"><value>{0} Thresholds</value></data>
+  <data name="ThresholdNetworkDescription" xml:space="preserve"><value>Actual received throughput changes the character state at these speeds.</value></data>
+  <data name="ThresholdUsageDescription" xml:space="preserve"><value>{0} usage changes the character state at these percentages.</value></data>
+  <data name="ThresholdStandingFrom" xml:space="preserve"><value>Standing from</value></data>
+  <data name="ThresholdWalkingFrom" xml:space="preserve"><value>Walking from</value></data>
+  <data name="ThresholdRunningFrom" xml:space="preserve"><value>Running from</value></data>
+  <data name="ThresholdValidation" xml:space="preserve"><value>Enter three increasing values between 1 and {0} {1}.</value></data>
+
+  <data name="ErrorOnlyCustomEditable" xml:space="preserve"><value>Only custom characters can be edited.</value></data>
+  <data name="ErrorCharacterNotFound" xml:space="preserve"><value>Custom character could not be found.</value></data>
+  <data name="ErrorCharacterNameRequired" xml:space="preserve"><value>Character name is required.</value></data>
+  <data name="ErrorDuplicateCharacterName" xml:space="preserve"><value>A custom character with the same name already exists.</value></data>
+  <data name="ErrorImageRequired" xml:space="preserve"><value>{0} image file is required.</value></data>
+  <data name="ErrorAtLeastOneImageRequired" xml:space="preserve"><value>Choose at least one state image.</value></data>
+  <data name="ErrorImageFormat" xml:space="preserve"><value>{0} image must be a GIF, PNG, JPG, or JPEG file.</value></data>
+  <data name="ErrorImageNoFrames" xml:space="preserve"><value>{0} image has no frames.</value></data>
+  <data name="ErrorImageUnreadable" xml:space="preserve"><value>{0} image could not be read.</value></data>
+
+  <data name="SpeechVillainHeader" xml:space="preserve"><value>{0} villain</value></data>
+  <data name="SpeechNoProcessData" xml:space="preserve"><value>No process data</value></data>
+  <data name="InteractionHello" xml:space="preserve"><value>Hello!</value></data>
+
+  <data name="OnboardingWindowTitle" xml:space="preserve"><value>PcMate Help</value></data>
+  <data name="OnboardingHelp" xml:space="preserve"><value>Help</value></data>
+  <data name="OnboardingSingleTitle" xml:space="preserve"><value>Get started with PcMate</value></data>
+  <data name="OnboardingSingleBody" xml:space="preserve"><value>Keep a companion on your desktop and see what your PC is doing at a glance.&#10;&#10;1. Drag the character to place it anywhere on your desktop.&#10;2. Left-click the character to say hello.&#10;3. Right-click the character to open the quick settings menu.&#10;4. Choose Memory, CPU, GPU, or Network and adjust its state thresholds.&#10;5. Register a custom character with one or more state images.&#10;6. Adjust the resource bar, speech bubble, text contrast, and animation speed from the menu.&#10;&#10;※ Network speed comes from Windows traffic counters. PcMate does not run a speed test or create extra network traffic.</value></data>
+  <data name="OnboardingReopenHint" xml:space="preserve"><value>Reopen anytime from Help / Tutorial.</value></data>
+  <data name="OnboardingConfirm" xml:space="preserve"><value>Got it</value></data>
+</root>

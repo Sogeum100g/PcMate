@@ -1,5 +1,6 @@
 using System.IO;
 using System.Text.Json;
+using PcMate.Localization;
 using PcMate.Models;
 
 namespace PcMate.Services;
@@ -14,21 +15,25 @@ public sealed class AppSettings
 
     public bool ShowImageBorder { get; init; }
 
+    public bool UseDarkMode { get; init; }
+
+    public bool HasSeenOnboarding { get; init; }
+
+    public string Language { get; init; } = LocalizationManager.SystemLanguage;
+
     public ResourceType SelectedResourceType { get; init; } = ResourceType.Memory;
 
-    public string CharacterId { get; init; } = "tails";
+    public string CharacterId { get; init; } = "blob";
 
     public double AnimationSpeedMultiplier { get; init; } = 1.0;
-
-    public double SpeechBubbleWidth { get; init; } = 180;
-
-    public double SpeechBubbleHeight { get; init; } = 64;
 
     public ResourceThresholds MemoryThresholds { get; init; } = ResourceThresholds.Default;
 
     public ResourceThresholds CpuThresholds { get; init; } = ResourceThresholds.Default;
 
     public ResourceThresholds GpuThresholds { get; init; } = ResourceThresholds.Default;
+
+    public ResourceThresholds NetworkThresholds { get; init; } = ResourceThresholds.NetworkDefault;
 }
 
 public sealed class AppSettingsStore
@@ -80,29 +85,28 @@ public sealed class AppSettingsStore
             ShowResourceBar = settings.ShowResourceBar,
             ShowSpeechBubble = settings.ShowSpeechBubble,
             ShowImageBorder = settings.ShowImageBorder,
+            UseDarkMode = settings.UseDarkMode,
+            HasSeenOnboarding = settings.HasSeenOnboarding,
+            Language = LocalizationManager.NormalizeLanguage(settings.Language),
             SelectedResourceType = Enum.IsDefined(settings.SelectedResourceType)
                 ? settings.SelectedResourceType
                 : ResourceType.Memory,
             CharacterId = string.IsNullOrWhiteSpace(settings.CharacterId)
-                ? "tails"
+                ? "blob"
                 : settings.CharacterId,
             AnimationSpeedMultiplier = double.IsFinite(settings.AnimationSpeedMultiplier)
                 ? settings.AnimationSpeedMultiplier
                 : 1.0,
-            SpeechBubbleWidth = double.IsFinite(settings.SpeechBubbleWidth) && settings.SpeechBubbleWidth > 0
-                ? settings.SpeechBubbleWidth
-                : 180,
-            SpeechBubbleHeight = double.IsFinite(settings.SpeechBubbleHeight) && settings.SpeechBubbleHeight > 0
-                ? settings.SpeechBubbleHeight
-                : 64,
-            MemoryThresholds = NormalizeThresholds(settings.MemoryThresholds),
-            CpuThresholds = NormalizeThresholds(settings.CpuThresholds),
-            GpuThresholds = NormalizeThresholds(settings.GpuThresholds)
+            MemoryThresholds = NormalizeThresholds(settings.MemoryThresholds, ResourceType.Memory),
+            CpuThresholds = NormalizeThresholds(settings.CpuThresholds, ResourceType.Cpu),
+            GpuThresholds = NormalizeThresholds(settings.GpuThresholds, ResourceType.Gpu),
+            NetworkThresholds = NormalizeThresholds(settings.NetworkThresholds, ResourceType.Network)
         };
     }
 
-    private static ResourceThresholds NormalizeThresholds(ResourceThresholds? thresholds)
+    private static ResourceThresholds NormalizeThresholds(ResourceThresholds? thresholds, ResourceType resourceType)
     {
-        return (thresholds ?? ResourceThresholds.Default).Normalize();
+        return (thresholds ?? resourceType.GetDefaultThresholds())
+            .Normalize(resourceType.GetThresholdMaximum());
     }
 }

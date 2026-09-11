@@ -2,6 +2,7 @@ using System.IO;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Windows.Media.Imaging;
+using PcMate.Localization;
 
 namespace PcMate.Services;
 
@@ -13,15 +14,18 @@ public sealed class CustomCharacterDefinition
 
     public string DirectoryPath { get; init; } = string.Empty;
 
-    public string StandingFileName { get; init; } = "standing.gif";
+    public string SleepingFileName { get; init; } = string.Empty;
 
-    public string WalkingFileName { get; init; } = "walking.gif";
+    public string StandingFileName { get; init; } = string.Empty;
 
-    public string RunningFileName { get; init; } = "running.gif";
+    public string WalkingFileName { get; init; } = string.Empty;
+
+    public string RunningFileName { get; init; } = string.Empty;
 }
 
 public sealed partial class CustomCharacterStore
 {
+    public const string SleepingState = "sleeping";
     public const string StandingState = "standing";
     public const string WalkingState = "walking";
     public const string RunningState = "running";
@@ -65,14 +69,17 @@ public sealed partial class CustomCharacterStore
 
     public CustomCharacterDefinition Register(
         string displayName,
+        string sleepingPath,
         string standingPath,
         string walkingPath,
         string runningPath)
     {
         displayName = NormalizeDisplayName(displayName);
+        ValidateImage(sleepingPath, SleepingState);
         ValidateImage(standingPath, StandingState);
         ValidateImage(walkingPath, WalkingState);
         ValidateImage(runningPath, RunningState);
+        ValidateAtLeastOneImage(sleepingPath, standingPath, walkingPath, runningPath);
 
         List<CustomCharacterDefinition> definitions = Load().ToList();
         ThrowIfDuplicateDisplayName(displayName, definitions, exceptId: null);
@@ -84,6 +91,7 @@ public sealed partial class CustomCharacterStore
             Id = id,
             DisplayName = displayName,
             DirectoryPath = characterDirectory,
+            SleepingFileName = CopyStateImage(characterDirectory, SleepingState, sleepingPath),
             StandingFileName = CopyStateImage(characterDirectory, StandingState, standingPath),
             WalkingFileName = CopyStateImage(characterDirectory, WalkingState, walkingPath),
             RunningFileName = CopyStateImage(characterDirectory, RunningState, runningPath)
@@ -97,20 +105,23 @@ public sealed partial class CustomCharacterStore
     public CustomCharacterDefinition Update(
         string id,
         string displayName,
+        string sleepingPath,
         string standingPath,
         string walkingPath,
         string runningPath)
     {
         displayName = NormalizeDisplayName(displayName);
+        ValidateImage(sleepingPath, SleepingState);
         ValidateImage(standingPath, StandingState);
         ValidateImage(walkingPath, WalkingState);
         ValidateImage(runningPath, RunningState);
+        ValidateAtLeastOneImage(sleepingPath, standingPath, walkingPath, runningPath);
 
         List<CustomCharacterDefinition> definitions = Load().ToList();
         int index = definitions.FindIndex(definition => definition.Id.Equals(id, StringComparison.OrdinalIgnoreCase));
         if (index < 0)
         {
-            throw new InvalidOperationException("Custom character could not be found.");
+            throw new InvalidOperationException(LocalizationManager.Instance.Get("ErrorCharacterNotFound"));
         }
 
         ThrowIfDuplicateDisplayName(displayName, definitions, exceptId: id);
@@ -121,6 +132,7 @@ public sealed partial class CustomCharacterStore
             Id = existing.Id,
             DisplayName = displayName,
             DirectoryPath = existing.DirectoryPath,
+            SleepingFileName = CopyStateImage(existing.DirectoryPath, SleepingState, sleepingPath),
             StandingFileName = CopyStateImage(existing.DirectoryPath, StandingState, standingPath),
             WalkingFileName = CopyStateImage(existing.DirectoryPath, WalkingState, walkingPath),
             RunningFileName = CopyStateImage(existing.DirectoryPath, RunningState, runningPath)
@@ -162,15 +174,25 @@ public sealed partial class CustomCharacterStore
 
     private static void ValidateImage(string path, string stateName)
     {
-        if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
+        if (string.IsNullOrWhiteSpace(path))
         {
-            throw new InvalidOperationException($"{stateName} image file is required.");
+            return;
+        }
+
+        string localizedStateName = GetLocalizedStateName(stateName);
+        if (!File.Exists(path))
+        {
+            throw new InvalidOperationException(LocalizationManager.Instance.Format(
+                "ErrorImageRequired",
+                localizedStateName));
         }
 
         string extension = Path.GetExtension(path);
         if (!SupportedExtensions.Contains(extension, StringComparer.OrdinalIgnoreCase))
         {
-            throw new InvalidOperationException($"{stateName} image must be a GIF, PNG, JPG, or JPEG file.");
+            throw new InvalidOperationException(LocalizationManager.Instance.Format(
+                "ErrorImageFormat",
+                localizedStateName));
         }
 
         try
@@ -182,7 +204,9 @@ public sealed partial class CustomCharacterStore
                 BitmapCacheOption.OnLoad);
             if (decoder.Frames.Count == 0)
             {
-                throw new InvalidOperationException($"{stateName} image has no frames.");
+                throw new InvalidOperationException(LocalizationManager.Instance.Format(
+                    "ErrorImageNoFrames",
+                    localizedStateName));
             }
         }
         catch (InvalidOperationException)
@@ -191,13 +215,43 @@ public sealed partial class CustomCharacterStore
         }
         catch (Exception exception)
         {
-            throw new InvalidOperationException($"{stateName} image could not be read.", exception);
+            throw new InvalidOperationException(LocalizationManager.Instance.Format(
+                "ErrorImageUnreadable",
+                localizedStateName), exception);
         }
+    }
+
+    private static void ValidateAtLeastOneImage(params string[] paths)
+    {
+        if (paths.All(string.IsNullOrWhiteSpace))
+        {
+            throw new InvalidOperationException(LocalizationManager.Instance.Get("ErrorAtLeastOneImageRequired"));
+        }
+    }
+
+    private static string GetLocalizedStateName(string stateName)
+    {
+        string key = stateName switch
+        {
+            SleepingState => "StateSleeping",
+            StandingState => "StateStanding",
+            WalkingState => "StateWalking",
+            RunningState => "StateRunning",
+            _ => stateName
+        };
+
+        return LocalizationManager.Instance.Get(key);
     }
 
     private static string CopyStateImage(string characterDirectory, string stateName, string sourcePath)
     {
         string stateDirectory = Path.Combine(characterDirectory, stateName);
+        if (string.IsNullOrWhiteSpace(sourcePath))
+        {
+            DeleteStateImages(stateDirectory, stateName);
+            return string.Empty;
+        }
+
         Directory.CreateDirectory(stateDirectory);
 
         string extension = Path.GetExtension(sourcePath).ToLowerInvariant();
@@ -208,13 +262,23 @@ public sealed partial class CustomCharacterStore
             return fileName;
         }
 
+        DeleteStateImages(stateDirectory, stateName);
+
+        File.Copy(sourcePath, destinationPath, overwrite: true);
+        return fileName;
+    }
+
+    private static void DeleteStateImages(string stateDirectory, string stateName)
+    {
+        if (!Directory.Exists(stateDirectory))
+        {
+            return;
+        }
+
         foreach (string existingFile in Directory.GetFiles(stateDirectory, $"{stateName}.*"))
         {
             File.Delete(existingFile);
         }
-
-        File.Copy(sourcePath, destinationPath, overwrite: true);
-        return fileName;
     }
 
     private static bool IsValidDefinition(CustomCharacterDefinition definition)
@@ -222,24 +286,48 @@ public sealed partial class CustomCharacterStore
         return !string.IsNullOrWhiteSpace(definition.Id)
             && !string.IsNullOrWhiteSpace(definition.DisplayName)
             && Directory.Exists(definition.DirectoryPath)
-            && File.Exists(GetStatePath(definition, StandingState, definition.StandingFileName))
-            && File.Exists(GetStatePath(definition, WalkingState, definition.WalkingFileName))
-            && File.Exists(GetStatePath(definition, RunningState, definition.RunningFileName));
+            && (HasStateImage(definition, SleepingState, definition.SleepingFileName)
+                || HasStateImage(definition, StandingState, definition.StandingFileName)
+                || HasStateImage(definition, WalkingState, definition.WalkingFileName)
+                || HasStateImage(definition, RunningState, definition.RunningFileName));
     }
 
     public static string GetStandingPath(CustomCharacterDefinition definition)
     {
-        return GetStatePath(definition, StandingState, definition.StandingFileName);
+        return GetExistingStatePath(definition, StandingState, definition.StandingFileName);
+    }
+
+    public static bool HasSleepingImage(CustomCharacterDefinition definition)
+    {
+        return HasStateImage(definition, SleepingState, definition.SleepingFileName);
+    }
+
+    public static string GetSleepingPath(CustomCharacterDefinition definition)
+    {
+        return GetExistingStatePath(definition, SleepingState, definition.SleepingFileName);
     }
 
     public static string GetWalkingPath(CustomCharacterDefinition definition)
     {
-        return GetStatePath(definition, WalkingState, definition.WalkingFileName);
+        return GetExistingStatePath(definition, WalkingState, definition.WalkingFileName);
     }
 
     public static string GetRunningPath(CustomCharacterDefinition definition)
     {
-        return GetStatePath(definition, RunningState, definition.RunningFileName);
+        return GetExistingStatePath(definition, RunningState, definition.RunningFileName);
+    }
+
+    private static bool HasStateImage(CustomCharacterDefinition definition, string stateName, string fileName)
+    {
+        return !string.IsNullOrWhiteSpace(fileName)
+            && File.Exists(GetStatePath(definition, stateName, fileName));
+    }
+
+    private static string GetExistingStatePath(CustomCharacterDefinition definition, string stateName, string fileName)
+    {
+        return HasStateImage(definition, stateName, fileName)
+            ? GetStatePath(definition, stateName, fileName)
+            : string.Empty;
     }
 
     private static string GetStatePath(CustomCharacterDefinition definition, string stateName, string fileName)
@@ -254,10 +342,27 @@ public sealed partial class CustomCharacterStore
             Id = definition.Id,
             DisplayName = definition.DisplayName,
             DirectoryPath = definition.DirectoryPath,
-            StandingFileName = string.IsNullOrWhiteSpace(definition.StandingFileName) ? "standing.gif" : definition.StandingFileName,
-            WalkingFileName = string.IsNullOrWhiteSpace(definition.WalkingFileName) ? "walking.gif" : definition.WalkingFileName,
-            RunningFileName = string.IsNullOrWhiteSpace(definition.RunningFileName) ? "running.gif" : definition.RunningFileName
+            SleepingFileName = NormalizeFileName(definition, SleepingState, definition.SleepingFileName, "sleeping.gif"),
+            StandingFileName = NormalizeFileName(definition, StandingState, definition.StandingFileName, "standing.gif"),
+            WalkingFileName = NormalizeFileName(definition, WalkingState, definition.WalkingFileName, "walking.gif"),
+            RunningFileName = NormalizeFileName(definition, RunningState, definition.RunningFileName, "running.gif")
         };
+    }
+
+    private static string NormalizeFileName(
+        CustomCharacterDefinition definition,
+        string stateName,
+        string fileName,
+        string legacyFileName)
+    {
+        if (!string.IsNullOrWhiteSpace(fileName))
+        {
+            return fileName;
+        }
+
+        return File.Exists(GetStatePath(definition, stateName, legacyFileName))
+            ? legacyFileName
+            : string.Empty;
     }
 
     private static string NormalizeDisplayName(string displayName)
@@ -265,7 +370,7 @@ public sealed partial class CustomCharacterStore
         displayName = displayName.Trim();
         if (string.IsNullOrWhiteSpace(displayName))
         {
-            throw new InvalidOperationException("Character name is required.");
+            throw new InvalidOperationException(LocalizationManager.Instance.Get("ErrorCharacterNameRequired"));
         }
 
         return displayName;
@@ -280,7 +385,7 @@ public sealed partial class CustomCharacterStore
                 !definition.Id.Equals(exceptId, StringComparison.OrdinalIgnoreCase)
                 && definition.DisplayName.Equals(displayName, StringComparison.OrdinalIgnoreCase)))
         {
-            throw new InvalidOperationException("A custom character with the same name already exists.");
+            throw new InvalidOperationException(LocalizationManager.Instance.Get("ErrorDuplicateCharacterName"));
         }
     }
 

@@ -8,7 +8,8 @@ public sealed class StateClassifier
     {
         [ResourceType.Memory] = ResourceThresholds.Default,
         [ResourceType.Cpu] = ResourceThresholds.Default,
-        [ResourceType.Gpu] = ResourceThresholds.Default
+        [ResourceType.Gpu] = ResourceThresholds.Default,
+        [ResourceType.Network] = ResourceThresholds.NetworkDefault
     };
 
     public CharacterState Classify(ResourceSnapshot snapshot)
@@ -17,35 +18,35 @@ public sealed class StateClassifier
         return Classify(ResourceType.Memory, snapshot.MemoryUsagePercent);
     }
 
-    public CharacterState Classify(int usagePercent)
+    public CharacterState Classify(int reading)
     {
-        return Classify(usagePercent, ResourceThresholds.Default);
+        return Classify(reading, ResourceThresholds.Default);
     }
 
-    public CharacterState Classify(ResourceType resourceType, int usagePercent)
+    public CharacterState Classify(ResourceType resourceType, int reading)
     {
-        return Classify(usagePercent, GetThresholds(resourceType));
+        return Classify(reading, GetThresholds(resourceType));
     }
 
     public ResourceThresholds GetThresholds(ResourceType resourceType)
     {
         return _thresholds.TryGetValue(resourceType, out ResourceThresholds? thresholds)
             ? thresholds
-            : ResourceThresholds.Default;
+            : resourceType.GetDefaultThresholds();
     }
 
     public void SetThresholds(ResourceType resourceType, ResourceThresholds thresholds)
     {
-        _thresholds[resourceType] = thresholds.Normalize();
+        _thresholds[resourceType] = thresholds.Normalize(resourceType.GetThresholdMaximum());
     }
 
-    private static CharacterState Classify(int usagePercent, ResourceThresholds thresholds)
+    private static CharacterState Classify(int reading, ResourceThresholds thresholds)
     {
-        return usagePercent switch
+        return reading switch
         {
-            _ when usagePercent < thresholds.SittingPercent => CharacterState.Lying,
-            _ when usagePercent < thresholds.WalkingPercent => CharacterState.Sitting,
-            _ when usagePercent < thresholds.RunningPercent => CharacterState.Walking,
+            _ when reading < thresholds.SittingPercent => CharacterState.Lying,
+            _ when reading < thresholds.WalkingPercent => CharacterState.Sitting,
+            _ when reading < thresholds.RunningPercent => CharacterState.Walking,
             _ => CharacterState.Running
         };
     }

@@ -6,16 +6,18 @@ namespace PcMate.Monitors;
 
 public sealed class SystemResourceMonitor : IResourceMonitor
 {
+    private readonly NetworkMonitor _networkMonitor = new();
     private CpuTimes? _previousCpuTimes;
     private IReadOnlyList<PerformanceCounter>? _gpuCounters;
 
-    public int GetUsagePercent(ResourceType resourceType)
+    public int GetReading(ResourceType resourceType)
     {
         return resourceType switch
         {
             ResourceType.Memory => NativeMemoryApi.GetMemoryUsagePercent(),
             ResourceType.Cpu => GetCpuUsagePercent(),
             ResourceType.Gpu => GetGpuUsagePercent(),
+            ResourceType.Network => _networkMonitor.GetReceiveMbps(),
             _ => NativeMemoryApi.GetMemoryUsagePercent()
         };
     }

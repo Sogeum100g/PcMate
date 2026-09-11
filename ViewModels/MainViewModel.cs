@@ -3,6 +3,7 @@ using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using System.Windows.Media;
 using System.Windows.Threading;
+using PcMate.Localization;
 using PcMate.Models;
 using PcMate.Monitors;
 using PcMate.Services;
@@ -30,11 +31,13 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     private bool _isDisposed;
     private bool _isSpeechBubbleEnabled;
     private DateTime _nextTopProcessRefreshAt = DateTime.MaxValue;
-    private int _resourceUsagePercent;
+    private int _resourceUsageValue;
     private ResourceType _selectedResourceType = ResourceType.Memory;
     private CharacterState _characterState;
     private ImageSource? _characterFrame;
+    private string _baseSpeechBubbleText = BuildSpeechBubbleHeader(ResourceType.Memory);
     private string _speechBubbleText = BuildSpeechBubbleHeader(ResourceType.Memory);
+    private bool _isInteractionMessageVisible;
 
     public MainViewModel(
         IResourceMonitor monitor,
@@ -55,17 +58,17 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 
     public event PropertyChangedEventHandler? PropertyChanged;
 
-    public int ResourceUsagePercent
+    public int ResourceUsageValue
     {
-        get => _resourceUsagePercent;
+        get => _resourceUsageValue;
         private set
         {
-            if (_resourceUsagePercent == value)
+            if (_resourceUsageValue == value)
             {
                 return;
             }
 
-            _resourceUsagePercent = value;
+            _resourceUsageValue = value;
             OnPropertyChanged();
             OnPropertyChanged(nameof(ResourceUsageText));
         }
@@ -84,10 +87,17 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             _selectedResourceType = value;
             OnPropertyChanged();
             OnPropertyChanged(nameof(ResourceUsageText));
+            OnPropertyChanged(nameof(ResourceUsageMaximum));
         }
     }
 
-    public string ResourceUsageText => $"{GetResourceLabel(SelectedResourceType)} {ResourceUsagePercent}%";
+    public int ResourceUsageMaximum => SelectedResourceType.GetThresholdMaximum();
+
+    public string ResourceUsageText =>
+        LocalizationManager.Instance.Format(
+            "ResourceReadingFormat",
+            SelectedResourceType.GetLocalizedName(),
+            SelectedResourceType.FormatReading(ResourceUsageValue));
 
     public string SpeechBubbleText
     {
@@ -174,12 +184,14 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 
     public CharacterOption RegisterCustomCharacter(
         string displayName,
+        string sleepingPath,
         string standingPath,
         string walkingPath,
         string runningPath)
     {
         CharacterOption character = _animationController.RegisterCustomCharacter(
             displayName,
+            sleepingPath,
             standingPath,
             walkingPath,
             runningPath);
@@ -190,6 +202,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     public CharacterOption UpdateCustomCharacter(
         string characterId,
         string displayName,
+        string sleepingPath,
         string standingPath,
         string walkingPath,
         string runningPath)
@@ -197,6 +210,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         CharacterOption character = _animationController.UpdateCustomCharacter(
             characterId,
             displayName,
+            sleepingPath,
             standingPath,
             walkingPath,
             runningPath);
@@ -253,7 +267,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         }
 
         SelectedResourceType = resourceType;
-        ResourceUsagePercent = 0;
+        ResourceUsageValue = 0;
         InvalidateTopProcessCache();
         ScheduleTopProcessRefresh(TopProcessInitialDelay);
         if (!_hasStarted)
@@ -291,6 +305,39 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         }
     }
 
+    public void ShowInteractionMessage(string message)
+    {
+        if (string.IsNullOrWhiteSpace(message))
+        {
+            return;
+        }
+
+        _isInteractionMessageVisible = true;
+        SpeechBubbleText = message;
+    }
+
+    public void ClearInteractionMessage()
+    {
+        if (!_isInteractionMessageVisible)
+        {
+            return;
+        }
+
+        _isInteractionMessageVisible = false;
+        SpeechBubbleText = _baseSpeechBubbleText;
+    }
+
+    public void RefreshLocalizedText()
+    {
+        OnPropertyChanged(nameof(ResourceUsageText));
+        InvalidateTopProcessCache();
+        if (_isSpeechBubbleEnabled)
+        {
+            ScheduleTopProcessRefresh(TimeSpan.Zero);
+            _ = RefreshAsync();
+        }
+    }
+
     private async Task RefreshAsync()
     {
         if (_isRefreshRunning)
@@ -317,8 +364,8 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
                     continue;
                 }
 
-                ResourceUsagePercent = result.UsagePercent;
-                CharacterState nextState = _classifier.Classify(result.ResourceType, result.UsagePercent);
+                ResourceUsageValue = result.Reading;
+                CharacterState nextState = _classifier.Classify(result.ResourceType, result.Reading);
                 if (CharacterState != nextState)
                 {
                     SetCharacterState(nextState);
@@ -342,8 +389,8 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         {
             return await Task.Run(() =>
             {
-                int usagePercent = _monitor.GetUsagePercent(resourceType);
-                return new ResourceRefreshResult(resourceType, usagePercent);
+                int reading = _monitor.GetReading(resourceType);
+                return new ResourceRefreshResult(resourceType, reading);
             });
         }
         catch
@@ -384,7 +431,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
                 return;
             }
 
-            SpeechBubbleText = BuildSpeechBubbleText(resourceType, topProcesses);
+            SetBaseSpeechBubbleText(BuildSpeechBubbleText(resourceType, topProcesses));
         }
         catch
         {
@@ -398,7 +445,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 
     private void InvalidateTopProcessCache()
     {
-        SpeechBubbleText = BuildSpeechBubbleHeader(SelectedResourceType);
+        SetBaseSpeechBubbleText(BuildSpeechBubbleHeader(SelectedResourceType));
     }
 
     public ResourceThresholds GetThresholds(ResourceType resourceType)
@@ -411,7 +458,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         _classifier.SetThresholds(resourceType, thresholds);
         if (SelectedResourceType == resourceType)
         {
-            CharacterState nextState = _classifier.Classify(resourceType, ResourceUsagePercent);
+            CharacterState nextState = _classifier.Classify(resourceType, ResourceUsageValue);
             if (CharacterState != nextState)
             {
                 SetCharacterState(nextState);
@@ -440,12 +487,21 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         _nextTopProcessRefreshAt = DateTime.UtcNow + delay;
     }
 
+    private void SetBaseSpeechBubbleText(string text)
+    {
+        _baseSpeechBubbleText = text;
+        if (!_isInteractionMessageVisible)
+        {
+            SpeechBubbleText = text;
+        }
+    }
+
     private static string BuildSpeechBubbleText(ResourceType resourceType, IReadOnlyList<ProcessResourceUsage> processes)
     {
         string header = BuildSpeechBubbleHeader(resourceType);
         if (processes.Count == 0)
         {
-            return $"{header}\nNo process data";
+            return $"{header}\n{LocalizationManager.Instance.Get("SpeechNoProcessData")}";
         }
 
         IEnumerable<string> lines = processes.Select((process, index) =>
@@ -463,18 +519,9 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 
     private static string BuildSpeechBubbleHeader(ResourceType resourceType)
     {
-        return $"{GetResourceLabel(resourceType)} 빌런";
-    }
-
-    private static string GetResourceLabel(ResourceType resourceType)
-    {
-        return resourceType switch
-        {
-            ResourceType.Memory => "Memory",
-            ResourceType.Cpu => "CPU",
-            ResourceType.Gpu => "GPU",
-            _ => "Resource"
-        };
+        return LocalizationManager.Instance.Format(
+            "SpeechVillainHeader",
+            resourceType.GetLocalizedName());
     }
 
     private static string FormatBytes(long bytes)
@@ -585,5 +632,5 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
     }
 
-    private sealed record ResourceRefreshResult(ResourceType ResourceType, int UsagePercent);
+    private sealed record ResourceRefreshResult(ResourceType ResourceType, int Reading);
 }

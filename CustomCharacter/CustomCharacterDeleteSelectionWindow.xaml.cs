@@ -1,4 +1,5 @@
 using System.Windows;
+using PcMate.Localization;
 using PcMate.Services;
 
 namespace PcMate.CustomCharacter;
@@ -28,7 +29,7 @@ public partial class CustomCharacterDeleteSelectionWindow : Window
         {
             MessageBox.Show(
                 this,
-                "Choose at least one custom character to delete.",
+                LocalizationManager.Instance.Get("CharacterDeleteSelectOne"),
                 "PcMate",
                 MessageBoxButton.OK,
                 MessageBoxImage.Information);
