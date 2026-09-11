@@ -4,10 +4,10 @@
 
 # PcMate
 
-**내 PC의 상태를 캐릭터의 움직임으로 보여주는 Windows 데스크톱 친구**
+**내 PC의 상태를 캐릭터의 움직임으로 보여주는 Windows 데스크톱 메이트**
 
 CPU, 메모리, GPU, 네트워크 사용량을 숫자만이 아니라<br />
-화면 위 캐릭터의 행동으로 자연스럽게 확인해 보세요.
+화면 위 캐릭터 움직임으로 자연스럽게 확인해 보세요.
 
 [Microsoft Store에서 설치](https://apps.microsoft.com/detail/9n263p97lstg?hl=ko-KR&gl=KR&ocid=pdpshare) · [itch.io에서 다운로드](https://nabura.itch.io/pcmate)
 
@@ -22,6 +22,9 @@ PcMate는 컴퓨터 화면 위에 작은 캐릭터를 띄워 두고 PC 자원 �
 작업 관리자를 계속 열어 두지 않아도 캐릭터가 **퍼질러 자고, 멍하니 서 있고, 걷고, 뛰는 모습**을 통해 현재 시스템 부하를 직관적으로 알 수 있습니다. 컴퓨터가 갑자기 느려졌다면 말풍선을 켜서 어떤 프로그램이 자원을 많이 사용하고 있는지도 확인할 수 있습니다.
 
 필요할 때만 표시하거나 항상 위에 둘 수 있으며, 원하는 이미지로 나만의 캐릭터를 만들어 사용할 수도 있습니다.
+
+<img width="900" height="450" alt="running-blob-chrome" src="https://github.com/user-attachments/assets/e39281c0-473b-45d9-a981-340b1c91e8d3" />
+<img width="900" height="450" alt="walking-ryan-powershell" src="https://github.com/user-attachments/assets/273bb94a-479e-449b-b390-cbdde3b13e50" />
 
 ## 주요 기능
 
@@ -49,7 +52,7 @@ PcMate는 Windows x64 환경을 지원합니다.
 
 설치 없이 실행하는 압축 파일은 itch.io에서 받을 수 있습니다.
 
-1. **[PcMate 다운로드 페이지](https://nabura.itch.io/pcmate)**에서 Windows용 ZIP 파일을 받습니다.
+1. [PcMate 다운로드 페이지](https://nabura.itch.io/pcmate)에서 Windows용 ZIP 파일을 받습니다.
 2. 압축을 원하는 폴더에 풉니다.
 3. `PcMate.exe`를 실행합니다.
 
